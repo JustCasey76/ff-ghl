@@ -216,17 +216,32 @@
 
 		loadFields(formIdInt)
 			.then((fields) => {
-				console.log(`[AQM GHL] Loading fields for form ${formIdInt}, existing map:`, existingMap);
+				console.log(`[AQM GHL] Loading fields for form ${formIdInt}`, {
+					existingMap,
+					fieldsCount: fields.length,
+					settingsMapping: settings.mapping,
+				});
 				
 				// Try auto-mapping only for empty fields (preserves existing manual mappings)
 				const autoMapped = autoMapFields(fields, existingMap);
 				const finalMap = { ...existingMap, ...autoMapped };
 				
+				console.log(`[AQM GHL] Final mapping for form ${formIdInt}:`, finalMap);
+				
 				container.find('select.aqm-ghl-field-select').each(function () {
-					const key = $(this).data('map-key');
-					const selected = finalMap && finalMap[key] ? finalMap[key] : '';
-					console.log(`[AQM GHL] Setting ${key} to ${selected} for form ${formIdInt}${autoMapped[key] ? ' (auto-mapped)' : ''}`);
-					setSelectOptions($(this), fields, selected);
+					const $select = $(this);
+					const key = $select.data('map-key');
+					const selected = finalMap && finalMap[key] ? String(finalMap[key]) : '';
+					console.log(`[AQM GHL] Setting ${key} to "${selected}" for form ${formIdInt}${autoMapped[key] ? ' (auto-mapped)' : ' (from saved settings)'}`);
+					setSelectOptions($select, fields, selected);
+					// Double-check the value was set
+					setTimeout(() => {
+						const actualValue = $select.val();
+						if (selected && actualValue !== selected) {
+							console.warn(`[AQM GHL] WARNING: ${key} value mismatch! Expected "${selected}", got "${actualValue}"`);
+							$select.val(selected); // Force set it again
+						}
+					}, 100);
 				});
 				renderCustomFields(formIdInt, container, fields);
 			})
@@ -271,8 +286,16 @@
 		function refreshFormBlocks() {
 			const selected = ($formSelect.val() || []).map((v) => parseInt(v, 10)).filter(Boolean);
 			
-			// Hide all blocks first
-			$mappingContainers.find('.aqm-ghl-form-block').hide();
+			// Hide all blocks first, but keep them in DOM so they submit their values
+			$mappingContainers.find('.aqm-ghl-form-block').each(function() {
+				const $block = $(this);
+				const formId = parseInt($block.data('form-id'), 10);
+				if (!selected.includes(formId)) {
+					$block.hide();
+				} else {
+					$block.show();
+				}
+			});
 			
 			if (!selected.length) {
 				return;
@@ -288,8 +311,27 @@
 					existingBlocks[fidInt] = block;
 					$mappingContainers.append(block);
 				} else {
-					// Show existing block
+					// Show existing block - ensure values are restored from settings
 					block.show();
+					// Re-apply saved mappings to ensure they're displayed correctly
+					const mappingByForm = settings.mapping || {};
+					const existingMap = mappingByForm[fidInt] || {};
+					const fields = formFieldsCache[fidInt] || [];
+					if (fields.length > 0 && Object.keys(existingMap).length > 0) {
+						block.find('select.aqm-ghl-field-select').each(function () {
+							const $select = $(this);
+							const key = $select.data('map-key');
+							const selectedValue = existingMap[key] || '';
+							if (selectedValue) {
+								// Update the select to show the saved value
+								const currentVal = $select.val();
+								if (currentVal !== String(selectedValue)) {
+									$select.val(selectedValue);
+									console.log(`[AQM GHL] Restored ${key} mapping to ${selectedValue} for form ${fidInt}`);
+								}
+							}
+						});
+					}
 				}
 			});
 		}

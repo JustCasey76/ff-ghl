@@ -309,10 +309,20 @@ class AQM_GHL_Admin {
 		$sanitized['mapping'] = $existing_mapping; // Start with existing - preserve all
 		
 		// Only update mappings for forms that are in the POST data (currently visible/selected forms)
+		// But preserve mappings for forms that are NOT in POST (hidden/deselected forms)
 		if ( ! empty( $mapping ) ) {
 			foreach ( $mapping as $fid => $map_values ) {
 				$fid = absint( $fid );
 				if ( ! $fid ) {
+					continue;
+				}
+				// Only update if we have actual values - don't overwrite with empty if form block was hidden
+				// Check if this form is in the selected form_ids - if not, preserve existing mapping
+				if ( ! in_array( $fid, $form_ids, true ) ) {
+					// Form is not selected, preserve existing mapping
+					if ( isset( $existing_mapping[ $fid ] ) ) {
+						$sanitized['mapping'][ $fid ] = $existing_mapping[ $fid ];
+					}
 					continue;
 				}
 				// Update this form's mapping - allow empty values (user can clear a mapping)
@@ -322,6 +332,20 @@ class AQM_GHL_Admin {
 					'first_name' => isset( $map_values['first_name'] ) ? absint( $map_values['first_name'] ) : '',
 					'last_name'  => isset( $map_values['last_name'] ) ? absint( $map_values['last_name'] ) : '',
 				);
+			}
+		}
+		
+		// Ensure all selected forms have mapping entries (even if empty) to prevent data loss
+		foreach ( $form_ids as $fid ) {
+			if ( ! isset( $sanitized['mapping'][ $fid ] ) ) {
+				$sanitized['mapping'][ $fid ] = isset( $existing_mapping[ $fid ] ) 
+					? $existing_mapping[ $fid ] 
+					: array(
+						'email'      => '',
+						'phone'      => '',
+						'first_name' => '',
+						'last_name'  => '',
+					);
 			}
 		}
 		
