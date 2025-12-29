@@ -6,9 +6,10 @@ Usage: from scripts/ folder -> .\create-ftp-deploy.ps1
 $ErrorActionPreference = "Stop"
 
 $rootDir        = Split-Path -Parent $PSScriptRoot
+$targetRoot     = Split-Path -Parent $rootDir   # main folder one level up
 $sourceDir      = $rootDir
-$ftpDir         = Join-Path $rootDir "FTP-Deploy"
-$stateFile      = Join-Path $rootDir ".last-ftp-deploy.json"
+$ftpDir         = Join-Path $targetRoot "FTP-Deploy"
+$stateFile      = Join-Path $targetRoot ".last-ftp-deploy.json"
 $pluginFileName = "aqm-ghl-connector.php"
 
 # Load previous state
