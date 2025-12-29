@@ -24,99 +24,6 @@
 		});
 	}
 
-	/**
-	 * Auto-map fields based on label patterns.
-	 * Only auto-maps fields that are currently empty - preserves existing manual mappings.
-	 * Users can still manually override any auto-mapped field.
-	 *
-	 * @param {Array} fields - Array of field objects with id and label.
-	 * @param {Object} existingMap - Current mapping object.
-	 * @returns {Object} Auto-mapped values (only for empty fields).
-	 */
-	function autoMapFields(fields, existingMap) {
-		const autoMap = {};
-		const labelPatterns = {
-			email: [
-				/^email$/i,
-				/^e-mail$/i,
-				/^e mail$/i,
-				/email address/i,
-				/email addr/i,
-				/^email$/i,
-			],
-			phone: [
-				/^phone$/i,
-				/^telephone$/i,
-				/^tel$/i,
-				/phone number/i,
-				/phone #/i,
-				/mobile/i,
-				/cell/i,
-				/cell phone/i,
-				/mobile phone/i,
-			],
-			first_name: [
-				/^first name$/i,
-				/^first$/i,
-				/^fname$/i,
-				/^f\.?name$/i,
-				/firstname/i,
-				/^given name$/i,
-				/^name$/i, // Only if no last_name match
-			],
-			last_name: [
-				/^last name$/i,
-				/^last$/i,
-				/^lname$/i,
-				/^l\.?name$/i,
-				/lastname/i,
-				/^surname$/i,
-				/^family name$/i,
-			],
-		};
-
-		mappingFields.forEach((key) => {
-			// Skip if already mapped - only auto-map empty fields
-			if (existingMap && existingMap[key] && existingMap[key] !== '') {
-				console.log(`[AQM GHL] Skipping auto-map for ${key} - already mapped to field ID ${existingMap[key]}`);
-				return;
-			}
-
-			const patterns = labelPatterns[key] || [];
-			let matchedField = null;
-
-			// Try exact matches first
-			for (const field of fields) {
-				const label = (field.label || '').trim();
-				if (!label) continue;
-
-				for (const pattern of patterns) {
-					if (pattern.test(label)) {
-						// Special handling for "name" - only match if it's likely first name
-						if (key === 'first_name' && /^name$/i.test(label)) {
-							// Check if there's a last_name field - if so, skip this match
-							const hasLastName = fields.some(f => 
-								labelPatterns.last_name.some(p => p.test(f.label || ''))
-							);
-							if (hasLastName) {
-								continue;
-							}
-						}
-						matchedField = field;
-						break;
-					}
-				}
-				if (matchedField) break;
-			}
-
-			if (matchedField) {
-				autoMap[key] = parseInt(matchedField.id, 10);
-				console.log(`[AQM GHL] Auto-mapped ${key} to field "${matchedField.label}" (ID: ${matchedField.id})`);
-			}
-		});
-
-		return autoMap;
-	}
 
 	function addCustomFieldRow(formId, container, data, fields) {
 		const formIdInt = parseInt(formId, 10);
@@ -191,8 +98,14 @@
 		// Use integer key (normalized from PHP)
 		const existingMap = mappingByForm[formIdInt] || {};
 
+		console.log(`[AQM GHL] Building mapping container for form ${formIdInt}`, {
+			formName,
+			existingMap,
+			formsList: formsList
+		});
+
 		const container = $(`
-			<div class="aqm-ghl-form-block" data-form-id="${formIdInt}">
+			<div class="aqm-ghl-form-block" data-form-id="${formIdInt}" style="display: block;">
 				<h3>${formName}</h3>
 				<div class="aqm-ghl-mapping-rows">
 					<label>Email (required)
@@ -213,7 +126,12 @@
 				<p><button type="button" class="button aqm-ghl-add-custom-field" data-form-id="${formIdInt}">Add Custom Field</button></p>
 			</div>
 		`);
+		
+		console.log(`[AQM GHL] Container created for form ${formIdInt}, length:`, container.length);
 
+		// Ensure container is visible immediately
+		container.show();
+		
 		loadFields(formIdInt)
 			.then((fields) => {
 				console.log(`[AQM GHL] Loading fields for form ${formIdInt}`, {
@@ -223,9 +141,8 @@
 					containerVisible: container.is(':visible'),
 				});
 				
-				// Try auto-mapping only for empty fields (preserves existing manual mappings)
-				const autoMapped = autoMapFields(fields, existingMap);
-				const finalMap = { ...existingMap, ...autoMapped };
+				// Use existing mapping directly (no auto-mapping)
+				const finalMap = existingMap || {};
 				
 				console.log(`[AQM GHL] Final mapping for form ${formIdInt}:`, finalMap);
 				
@@ -236,7 +153,7 @@
 					const $select = $(this);
 					const key = $select.data('map-key');
 					const selected = finalMap && finalMap[key] ? String(finalMap[key]) : '';
-					console.log(`[AQM GHL] Setting ${key} to "${selected}" for form ${formIdInt}${autoMapped[key] ? ' (auto-mapped)' : ' (from saved settings)'}`);
+					console.log(`[AQM GHL] Setting ${key} to "${selected}" for form ${formIdInt}`);
 					setSelectOptions($select, fields, selected);
 					// Double-check the value was set
 					setTimeout(() => {
@@ -253,6 +170,10 @@
 				console.error(`[AQM GHL] Error loading fields for form ${formIdInt}:`, error);
 				// Still show the container even if fields fail to load
 				container.show();
+				// Show empty selects
+				container.find('select.aqm-ghl-field-select').each(function () {
+					setSelectOptions($(this), [], '');
+				});
 			})
 			.catch(() => {
 				container.find('select.aqm-ghl-field-select').each(function () {
