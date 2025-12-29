@@ -285,9 +285,23 @@
 
 		console.info('[AQM GHL] Admin script initialized', {
 			hasTestButton: !!$testButton.length,
+			hasFormSelect: !!$formSelect.length,
+			hasMappingContainer: !!$mappingContainers.length,
 			page: window.location.href,
 			forms: settings.selectedForms || [],
+			settings: settings,
 		});
+
+		// Check if required elements exist
+		if (!$mappingContainers.length) {
+			console.error('[AQM GHL] ERROR: Mapping container not found!');
+			return;
+		}
+
+		if (!$formSelect.length) {
+			console.error('[AQM GHL] ERROR: Form select not found!');
+			return;
+		}
 
 		// Store existing blocks to preserve settings
 		const existingBlocks = {};
@@ -340,36 +354,62 @@
 			refreshFormBlocks();
 		});
 
-		// Initial load - build blocks for all selected forms and any forms with saved mappings
-		// First, get selected forms from the actual select element (in case settings haven't loaded yet)
-		const selectedFromDOM = ($formSelect.val() || []).map((v) => parseInt(v, 10)).filter(Boolean);
-		const initialSelected = (settings.selectedForms || []).map((v) => parseInt(v, 10)).filter(Boolean);
-		const formsWithMappings = Object.keys(settings.mapping || {}).map((v) => parseInt(v, 10)).filter(Boolean);
-		// Combine all sources and deduplicate
-		const formsToLoad = [...new Set([...selectedFromDOM, ...initialSelected, ...formsWithMappings])];
-		
-		console.log('[AQM GHL] Initial load - forms to load:', {
-			selectedFromDOM,
-			initialSelected,
-			formsWithMappings,
-			formsToLoad,
-			settings: settings
-		});
-		
-		if (formsToLoad.length) {
-			formsToLoad.forEach((fid) => {
-				const fidInt = parseInt(fid, 10);
-				console.log(`[AQM GHL] Creating initial block for form ${fidInt}`);
-				const block = buildMappingContainer(fidInt);
-				existingBlocks[fidInt] = block;
-				$mappingContainers.append(block);
+		// Function to initialize form blocks
+		function initializeFormBlocks() {
+			// First, get selected forms from the actual select element (in case settings haven't loaded yet)
+			const selectedFromDOM = ($formSelect.val() || []).map((v) => parseInt(v, 10)).filter(Boolean);
+			const initialSelected = (settings.selectedForms || []).map((v) => parseInt(v, 10)).filter(Boolean);
+			const formsWithMappings = Object.keys(settings.mapping || {}).map((v) => parseInt(v, 10)).filter(Boolean);
+			// Combine all sources and deduplicate
+			const formsToLoad = [...new Set([...selectedFromDOM, ...initialSelected, ...formsWithMappings])];
+			
+			console.log('[AQM GHL] Initial load - forms to load:', {
+				selectedFromDOM,
+				initialSelected,
+				formsWithMappings,
+				formsToLoad,
+				formSelectValue: $formSelect.val(),
+				settings: settings
 			});
-		} else {
-			console.warn('[AQM GHL] No forms to load on initial page load');
+			
+			if (formsToLoad.length) {
+				formsToLoad.forEach((fid) => {
+					const fidInt = parseInt(fid, 10);
+					if (existingBlocks[fidInt] && existingBlocks[fidInt].length) {
+						console.log(`[AQM GHL] Block already exists for form ${fidInt}, skipping`);
+						return;
+					}
+					console.log(`[AQM GHL] Creating initial block for form ${fidInt}`);
+					try {
+						const block = buildMappingContainer(fidInt);
+						if (block && block.length) {
+							existingBlocks[fidInt] = block;
+							$mappingContainers.append(block);
+							console.log(`[AQM GHL] Successfully created and appended block for form ${fidInt}`);
+						} else {
+							console.error(`[AQM GHL] Failed to create block for form ${fidInt} - block is empty`);
+						}
+					} catch (error) {
+						console.error(`[AQM GHL] Error creating block for form ${fidInt}:`, error);
+					}
+				});
+			} else {
+				console.warn('[AQM GHL] No forms to load on initial page load', {
+					selectedFromDOM,
+					initialSelected,
+					formsWithMappings
+				});
+			}
+			
+			// Also trigger refresh to ensure everything is visible
+			refreshFormBlocks();
 		}
+
+		// Initialize immediately
+		initializeFormBlocks();
 		
-		// Also trigger refresh to ensure everything is visible
-		refreshFormBlocks();
+		// Also try after a short delay in case DOM isn't fully ready
+		setTimeout(initializeFormBlocks, 100);
 
 		$testButton.on('click', function (e) {
 			e.preventDefault();

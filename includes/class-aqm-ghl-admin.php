@@ -53,6 +53,11 @@ class AQM_GHL_Admin {
 	 * @param string $hook Current admin page hook.
 	 */
 	public function enqueue_assets( $hook ) {
+		// Only enqueue on our settings page
+		if ( 'toplevel_page_aqm-ghl-connector' !== $hook ) {
+			return;
+		}
+
 		wp_enqueue_style(
 			'aqm-ghl-admin',
 			AQM_GHL_CONNECTOR_URL . 'assets/css/admin.css',
