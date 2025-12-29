@@ -290,14 +290,18 @@
 				formsWithMappings,
 				formsToLoad,
 				formSelectValue: $formSelect.val(),
-				settings: settings
+				formSelectElement: $formSelect[0],
+				settings: settings,
+				mappingContainerExists: $mappingContainers.length > 0,
+				mappingContainerHTML: $mappingContainers.html()
 			});
 			
 			if (formsToLoad.length) {
 				formsToLoad.forEach((fid) => {
 					const fidInt = parseInt(fid, 10);
 					if (existingBlocks[fidInt] && existingBlocks[fidInt].length) {
-						console.log(`[AQM GHL] Block already exists for form ${fidInt}, skipping`);
+						console.log(`[AQM GHL] Block already exists for form ${fidInt}, showing it`);
+						existingBlocks[fidInt].show();
 						return;
 					}
 					console.log(`[AQM GHL] Creating initial block for form ${fidInt}`);
@@ -306,7 +310,12 @@
 						if (block && block.length) {
 							existingBlocks[fidInt] = block;
 							$mappingContainers.append(block);
-							console.log(`[AQM GHL] Successfully created and appended block for form ${fidInt}`);
+							console.log(`[AQM GHL] Successfully created and appended block for form ${fidInt}`, {
+								blockLength: block.length,
+								containerHTML: $mappingContainers.html().substring(0, 200)
+							});
+							// Force show
+							block.show();
 						} else {
 							console.error(`[AQM GHL] Failed to create block for form ${fidInt} - block is empty`);
 						}
@@ -318,19 +327,32 @@
 				console.warn('[AQM GHL] No forms to load on initial page load', {
 					selectedFromDOM,
 					initialSelected,
-					formsWithMappings
+					formsWithMappings,
+					formSelectOptions: $formSelect.find('option:selected').map(function() { return $(this).val(); }).get()
 				});
 			}
 			
 			// Also trigger refresh to ensure everything is visible
 			refreshFormBlocks();
+			
+			// Final check - log what's actually in the container
+			setTimeout(() => {
+				const blocksInContainer = $mappingContainers.find('.aqm-ghl-form-block');
+				console.log('[AQM GHL] Final check - blocks in container:', {
+					count: blocksInContainer.length,
+					visible: blocksInContainer.filter(':visible').length,
+					blockIds: blocksInContainer.map(function() { return $(this).data('form-id'); }).get()
+				});
+			}, 500);
 		}
 
 		// Initialize immediately
 		initializeFormBlocks();
 		
-		// Also try after a short delay in case DOM isn't fully ready
+		// Also try after delays in case DOM isn't fully ready
 		setTimeout(initializeFormBlocks, 100);
+		setTimeout(initializeFormBlocks, 500);
+		setTimeout(initializeFormBlocks, 1000);
 
 		$testButton.on('click', function (e) {
 			e.preventDefault();
