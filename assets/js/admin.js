@@ -157,17 +157,31 @@
 			forms: settings.selectedForms || [],
 		});
 
+		// Store existing blocks to preserve settings
+		const existingBlocks = {};
+
 		function refreshFormBlocks() {
 			const selected = ($formSelect.val() || []).map((v) => parseInt(v, 10)).filter(Boolean);
-			$mappingContainers.empty();
-
+			
+			// Hide all blocks first
+			$mappingContainers.find('.aqm-ghl-form-block').hide();
+			
 			if (!selected.length) {
 				return;
 			}
 
+			// Show or create blocks for selected forms
 			selected.forEach((fid) => {
-				const block = buildMappingContainer(fid);
-				$mappingContainers.append(block);
+				let block = existingBlocks[fid];
+				if (!block || !block.length) {
+					// Create new block if it doesn't exist
+					block = buildMappingContainer(fid);
+					existingBlocks[fid] = block;
+					$mappingContainers.append(block);
+				} else {
+					// Show existing block
+					block.show();
+				}
 			});
 		}
 
@@ -175,7 +189,15 @@
 			refreshFormBlocks();
 		});
 
-		refreshFormBlocks();
+		// Initial load - build blocks for all selected forms
+		const initialSelected = (settings.selectedForms || []).map((v) => parseInt(v, 10)).filter(Boolean);
+		if (initialSelected.length) {
+			initialSelected.forEach((fid) => {
+				const block = buildMappingContainer(fid);
+				existingBlocks[fid] = block;
+				$mappingContainers.append(block);
+			});
+		}
 
 		$testButton.on('click', function (e) {
 			e.preventDefault();

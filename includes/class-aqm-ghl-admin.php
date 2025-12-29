@@ -261,8 +261,13 @@ class AQM_GHL_Admin {
 		}
 		$sanitized['form_ids'] = $form_ids;
 
+		// Preserve existing mappings and custom fields for all forms, merge with new data
+		$existing_mapping = isset( $existing['mapping'] ) && is_array( $existing['mapping'] ) ? $existing['mapping'] : array();
+		$existing_custom_fields = isset( $existing['custom_fields'] ) && is_array( $existing['custom_fields'] ) ? $existing['custom_fields'] : array();
+		
+		// Process new mapping data from form submission
 		$mapping = isset( $input['mapping'] ) && is_array( $input['mapping'] ) ? $input['mapping'] : array();
-		$sanitized['mapping'] = array();
+		$sanitized['mapping'] = $existing_mapping; // Start with existing
 		if ( ! empty( $mapping ) ) {
 			foreach ( $mapping as $fid => $map_values ) {
 				$fid = absint( $fid );
@@ -278,8 +283,42 @@ class AQM_GHL_Admin {
 			}
 		}
 
+		// Process new custom fields data from form submission
+		// The input comes as per-form structure: [form_id] => [ [ghl_field_id, form_field_id], ... ]
 		$custom_fields = isset( $input['custom_fields'] ) ? $input['custom_fields'] : array();
-		$sanitized['custom_fields'] = aqm_ghl_sanitize_custom_fields( $custom_fields );
+		$sanitized_custom_fields = $existing_custom_fields; // Start with existing
+		if ( ! empty( $custom_fields ) && is_array( $custom_fields ) ) {
+			foreach ( $custom_fields as $fid => $fields_list ) {
+				$fid = absint( $fid );
+				if ( ! $fid ) {
+					continue;
+				}
+				// Sanitize the fields list for this form
+				if ( is_array( $fields_list ) ) {
+					$cleaned = array();
+					foreach ( $fields_list as $field ) {
+						if ( empty( $field['ghl_field_id'] ) && empty( $field['form_field_id'] ) ) {
+							continue;
+						}
+						$ghl_field_id  = isset( $field['ghl_field_id'] ) ? sanitize_text_field( $field['ghl_field_id'] ) : '';
+						$form_field_id = isset( $field['form_field_id'] ) ? absint( $field['form_field_id'] ) : 0;
+						if ( $ghl_field_id && $form_field_id ) {
+							$cleaned[] = array(
+								'ghl_field_id'  => $ghl_field_id,
+								'form_field_id' => $form_field_id,
+							);
+						}
+					}
+					if ( ! empty( $cleaned ) ) {
+						$sanitized_custom_fields[ $fid ] = $cleaned;
+					} else {
+						// If empty, remove this form's custom fields (user cleared them)
+						unset( $sanitized_custom_fields[ $fid ] );
+					}
+				}
+			}
+		}
+		$sanitized['custom_fields'] = $sanitized_custom_fields;
 
 		$sanitized['tags'] = isset( $input['tags'] ) ? sanitize_text_field( $input['tags'] ) : '';
 
