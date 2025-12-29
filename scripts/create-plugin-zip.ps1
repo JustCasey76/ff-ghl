@@ -35,9 +35,13 @@ $zipFileStream = [System.IO.File]::Create($output)
 $zip           = New-Object System.IO.Compression.ZipArchive($zipFileStream, [System.IO.Compression.ZipArchiveMode]::Create)
 
 $excludeDirs = @(".git", "scripts", ".vscode")
+$excludeFiles = @($output)
 $files = Get-ChildItem -Path $projectRoot -Recurse -File | Where-Object {
     foreach ($ex in $excludeDirs) {
         if ($_.FullName -like "*\$ex*") { return $false }
+    }
+    foreach ($exFile in $excludeFiles) {
+        if ($_.FullName -eq $exFile) { return $false }
     }
     return $true
 }
