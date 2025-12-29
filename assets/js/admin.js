@@ -286,12 +286,15 @@
 				formsToLoad,
 				formSelectValue: $formSelect.val(),
 				formSelectElement: $formSelect[0],
+				allOptions: $formSelect.find('option').map(function() { return { value: $(this).val(), selected: $(this).prop('selected'), text: $(this).text() }; }).get(),
+				selectedOptions: $formSelect.find('option:selected').map(function() { return { value: $(this).val(), text: $(this).text() }; }).get(),
 				settings: settings,
 				mappingContainerExists: $mappingContainers.length > 0,
 				mappingContainerHTML: $mappingContainers.html()
 			});
 			
-			if (formsToLoad.length) {
+			// Always create blocks for selected forms, even if empty
+			if (formsToLoad.length > 0) {
 				formsToLoad.forEach((fid) => {
 					const fidInt = parseInt(fid, 10);
 					if (existingBlocks[fidInt] && existingBlocks[fidInt].length) {
@@ -307,15 +310,17 @@
 							$mappingContainers.append(block);
 							console.log(`[AQM GHL] Successfully created and appended block for form ${fidInt}`, {
 								blockLength: block.length,
-								containerHTML: $mappingContainers.html().substring(0, 200)
+								blockHTML: block[0].outerHTML.substring(0, 300),
+								containerHTML: $mappingContainers.html().substring(0, 300)
 							});
 							// Force show
 							block.show();
+							block.css('display', 'block');
 						} else {
 							console.error(`[AQM GHL] Failed to create block for form ${fidInt} - block is empty`);
 						}
 					} catch (error) {
-						console.error(`[AQM GHL] Error creating block for form ${fidInt}:`, error);
+						console.error(`[AQM GHL] Error creating block for form ${fidInt}:`, error, error.stack);
 					}
 				});
 			} else {
@@ -323,7 +328,8 @@
 					selectedFromDOM,
 					initialSelected,
 					formsWithMappings,
-					formSelectOptions: $formSelect.find('option:selected').map(function() { return $(this).val(); }).get()
+					formSelectOptions: $formSelect.find('option:selected').map(function() { return $(this).val(); }).get(),
+					allFormOptions: $formSelect.find('option').map(function() { return { val: $(this).val(), selected: $(this).prop('selected') }; }).get()
 				});
 			}
 			
@@ -336,7 +342,8 @@
 				console.log('[AQM GHL] Final check - blocks in container:', {
 					count: blocksInContainer.length,
 					visible: blocksInContainer.filter(':visible').length,
-					blockIds: blocksInContainer.map(function() { return $(this).data('form-id'); }).get()
+					blockIds: blocksInContainer.map(function() { return $(this).data('form-id'); }).get(),
+					containerHTML: $mappingContainers.html().substring(0, 500)
 				});
 			}, 500);
 		}
