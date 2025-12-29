@@ -23,7 +23,7 @@ if (Test-Path $stateFile) {
 
 # Skip patterns
 $skipDirs  = @(".git", "scripts", ".vscode", ".idea", "FTP-Deploy", "node_modules", "vendor")
-$skipFiles = @(".gitignore", ".DS_Store", "Thumbs.db", ".last-ftp-deploy.json")
+$skipFiles = @(".gitignore", ".DS_Store", "Thumbs.db", ".last-ftp-deploy.json", ".zip")
 
 function Should-Skip {
     param($relativePath)
