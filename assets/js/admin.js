@@ -286,64 +286,58 @@
 		function refreshFormBlocks() {
 			const selected = ($formSelect.val() || []).map((v) => parseInt(v, 10)).filter(Boolean);
 			
-			// Hide all blocks first, but keep them in DOM so they submit their values
-			$mappingContainers.find('.aqm-ghl-form-block').each(function() {
-				const $block = $(this);
-				const formId = parseInt($block.data('form-id'), 10);
-				if (!selected.includes(formId)) {
-					$block.hide();
-				} else {
-					$block.show();
-				}
-			});
-			
-			if (!selected.length) {
-				return;
-			}
-
-			// Show or create blocks for selected forms
-			selected.forEach((fid) => {
-				const fidInt = parseInt(fid, 10);
-				let block = existingBlocks[fidInt];
-				if (!block || !block.length) {
-					// Create new block if it doesn't exist
-					block = buildMappingContainer(fidInt);
-					existingBlocks[fidInt] = block;
-					$mappingContainers.append(block);
-				} else {
-					// Show existing block - ensure values are restored from settings
-					block.show();
-					// Re-apply saved mappings to ensure they're displayed correctly
-					const mappingByForm = settings.mapping || {};
-					const existingMap = mappingByForm[fidInt] || {};
-					const fields = formFieldsCache[fidInt] || [];
-					if (fields.length > 0 && Object.keys(existingMap).length > 0) {
-						block.find('select.aqm-ghl-field-select').each(function () {
-							const $select = $(this);
-							const key = $select.data('map-key');
-							const selectedValue = existingMap[key] || '';
-							if (selectedValue) {
-								// Update the select to show the saved value
-								const currentVal = $select.val();
-								if (currentVal !== String(selectedValue)) {
-									$select.val(selectedValue);
-									console.log(`[AQM GHL] Restored ${key} mapping to ${selectedValue} for form ${fidInt}`);
+			// Never hide blocks - always show all created blocks
+			// Create blocks for selected forms if they don't exist
+			if (selected.length > 0) {
+				selected.forEach((fid) => {
+					const fidInt = parseInt(fid, 10);
+					let block = existingBlocks[fidInt];
+					if (!block || !block.length) {
+						// Create new block if it doesn't exist
+						block = buildMappingContainer(fidInt);
+						existingBlocks[fidInt] = block;
+						$mappingContainers.append(block);
+					} else {
+						// Ensure existing block is visible and values are restored from settings
+						block.show();
+						// Re-apply saved mappings to ensure they're displayed correctly
+						const mappingByForm = settings.mapping || {};
+						const existingMap = mappingByForm[fidInt] || {};
+						const fields = formFieldsCache[fidInt] || [];
+						if (fields.length > 0 && Object.keys(existingMap).length > 0) {
+							block.find('select.aqm-ghl-field-select').each(function () {
+								const $select = $(this);
+								const key = $select.data('map-key');
+								const selectedValue = existingMap[key] || '';
+								if (selectedValue) {
+									// Update the select to show the saved value
+									const currentVal = $select.val();
+									if (currentVal !== String(selectedValue)) {
+										$select.val(selectedValue);
+										console.log(`[AQM GHL] Restored ${key} mapping to ${selectedValue} for form ${fidInt}`);
+									}
 								}
-							}
-						});
+							});
+						}
 					}
-				}
-			});
+				});
+			}
+			
+			// Ensure all existing blocks are visible (never hide them)
+			$mappingContainers.find('.aqm-ghl-form-block').show();
 		}
 
 		$formSelect.on('change', function () {
 			refreshFormBlocks();
 		});
 
-		// Initial load - build blocks for all selected forms
+		// Initial load - build blocks for all selected forms and any forms with saved mappings
 		const initialSelected = (settings.selectedForms || []).map((v) => parseInt(v, 10)).filter(Boolean);
-		if (initialSelected.length) {
-			initialSelected.forEach((fid) => {
+		const formsWithMappings = Object.keys(settings.mapping || {}).map((v) => parseInt(v, 10)).filter(Boolean);
+		const formsToLoad = [...new Set([...initialSelected, ...formsWithMappings])]; // Combine and deduplicate
+		
+		if (formsToLoad.length) {
+			formsToLoad.forEach((fid) => {
 				const fidInt = parseInt(fid, 10);
 				const block = buildMappingContainer(fidInt);
 				existingBlocks[fidInt] = block;
