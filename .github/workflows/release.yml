@@ -1,0 +1,82 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'aqm-ghl-connector.php'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep -oP "Version:\s*\K[\d.]+" aqm-ghl-connector.php | head -1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+      
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG does not exist"
+          fi
+      
+      - name: Create tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a "$TAG" -m "Version ${{ steps.version.outputs.version }}"
+          git push origin "$TAG"
+      
+      - name: Create plugin ZIP
+        run: |
+          PLUGIN_NAME="aqm-ghl-connector"
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_NAME="${PLUGIN_NAME}-${VERSION}.zip"
+          
+          # Create zip with proper structure (forward slashes)
+          mkdir -p "${PLUGIN_NAME}"
+          cp -r assets includes "${PLUGIN_NAME}/" 2>/dev/null || true
+          cp aqm-ghl-connector.php "${PLUGIN_NAME}/"
+          
+          # Create zip file
+          zip -r "${ZIP_NAME}" "${PLUGIN_NAME}" -x "*.git*" "*.DS_Store" "scripts/*" "FTP-Deploy/*" "*.zip"
+          
+          # Cleanup
+          rm -rf "${PLUGIN_NAME}"
+          
+          echo "ZIP_FILE=${ZIP_NAME}" >> $GITHUB_ENV
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Version ${{ steps.version.outputs.version }}
+          body: |
+            ## Version ${{ steps.version.outputs.version }}
+            
+            See commit messages for details.
+          files: ${{ env.ZIP_FILE }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -14,14 +14,9 @@ if ( ! function_exists( 'aqm_ghl_get_settings' ) ) {
 		$defaults = array(
 			'location_id'    => '',
 			'private_token'  => '',
-			'form_id'        => '',
-			'mapping'        => array(
-				'email'      => '',
-				'phone'      => '',
-				'first_name' => '',
-				'last_name'  => '',
-			),
-			'custom_fields'  => array(),
+			'form_ids'       => array(),
+			'mapping'        => array(), // per form: [form_id] => [email, phone, first_name, last_name]
+			'custom_fields'  => array(), // per form: [form_id] => [ [ghl_field_id, form_field_id], ... ]
 			'tags'           => '',
 			'enable_logging' => false,
 		);
@@ -280,7 +275,7 @@ if ( ! function_exists( 'aqm_ghl_sanitize_custom_fields' ) ) {
 	/**
 	 * Sanitize custom field mappings.
 	 *
-	 * @param array $custom_fields Raw input.
+	 * @param array $custom_fields Raw input (per form or flat).
 	 *
 	 * @return array
 	 */
@@ -289,24 +284,49 @@ if ( ! function_exists( 'aqm_ghl_sanitize_custom_fields' ) ) {
 			return array();
 		}
 
+		// Detect per-form structure.
+		$is_per_form = false;
+		foreach ( $custom_fields as $key => $value ) {
+			if ( is_array( $value ) && isset( $value[0] ) && is_array( $value[0] ) ) {
+				$is_per_form = true;
+				break;
+			}
+		}
+
+		// Helper to clean a list.
+		$clean_list = function ( $list ) {
+			$out = array();
+			foreach ( $list as $custom_field ) {
+				if ( empty( $custom_field['ghl_field_id'] ) && empty( $custom_field['form_field_id'] ) ) {
+					continue;
+				}
+				$ghl_field_id  = isset( $custom_field['ghl_field_id'] ) ? sanitize_text_field( $custom_field['ghl_field_id'] ) : '';
+				$form_field_id = isset( $custom_field['form_field_id'] ) ? absint( $custom_field['form_field_id'] ) : 0;
+				if ( ! $ghl_field_id || ! $form_field_id ) {
+					continue;
+				}
+				$out[] = array(
+					'ghl_field_id'  => $ghl_field_id,
+					'form_field_id' => $form_field_id,
+				);
+			}
+			return $out;
+		};
+
+		if ( ! $is_per_form ) {
+			return $clean_list( $custom_fields );
+		}
+
 		$clean = array();
-
-		foreach ( $custom_fields as $custom_field ) {
-			if ( empty( $custom_field['ghl_field_id'] ) && empty( $custom_field['form_field_id'] ) ) {
+		foreach ( $custom_fields as $form_id => $list ) {
+			$form_id = absint( $form_id );
+			if ( ! $form_id ) {
 				continue;
 			}
-
-			$ghl_field_id  = isset( $custom_field['ghl_field_id'] ) ? sanitize_text_field( $custom_field['ghl_field_id'] ) : '';
-			$form_field_id = isset( $custom_field['form_field_id'] ) ? absint( $custom_field['form_field_id'] ) : 0;
-
-			if ( ! $ghl_field_id || ! $form_field_id ) {
-				continue;
+			$cleaned = $clean_list( $list );
+			if ( ! empty( $cleaned ) ) {
+				$clean[ $form_id ] = $cleaned;
 			}
-
-			$clean[] = array(
-				'ghl_field_id'  => $ghl_field_id,
-				'form_field_id' => $form_field_id,
-			);
 		}
 
 		return $clean;

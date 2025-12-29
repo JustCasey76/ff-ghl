@@ -25,7 +25,9 @@ class AQM_GHL_Handler {
 	public function maybe_send_to_ghl( $entry_id, $form_id ) {
 		$settings = aqm_ghl_get_settings();
 
-		if ( empty( $settings['form_id'] ) || (int) $settings['form_id'] !== (int) $form_id ) {
+		$form_ids = ! empty( $settings['form_ids'] ) && is_array( $settings['form_ids'] ) ? array_map( 'absint', $settings['form_ids'] ) : array();
+
+		if ( empty( $form_ids ) || ! in_array( (int) $form_id, $form_ids, true ) ) {
 			return;
 		}
 
@@ -47,7 +49,8 @@ class AQM_GHL_Handler {
 		}
 
 		$metas = $entry->metas;
-		$map   = isset( $settings['mapping'] ) ? $settings['mapping'] : array();
+		$map_all = isset( $settings['mapping'] ) ? $settings['mapping'] : array();
+		$map     = isset( $map_all[ $form_id ] ) ? $map_all[ $form_id ] : array();
 
 		$email      = $this->get_meta_value( $metas, isset( $map['email'] ) ? $map['email'] : 0 );
 		$raw_phone  = $this->get_meta_value( $metas, isset( $map['phone'] ) ? $map['phone'] : 0 );
@@ -81,7 +84,7 @@ class AQM_GHL_Handler {
 			}
 		}
 
-		$custom_fields = $this->prepare_custom_fields( $settings, $metas );
+		$custom_fields = $this->prepare_custom_fields( $settings, $metas, $form_id );
 		if ( ! empty( $custom_fields ) ) {
 			$payload['customFields'] = $custom_fields;
 		}
@@ -129,17 +132,20 @@ class AQM_GHL_Handler {
 	 *
 	 * @param array $settings Plugin settings.
 	 * @param array $metas    Entry metas.
+	 * @param int   $form_id  Current form ID.
 	 *
 	 * @return array
 	 */
-	private function prepare_custom_fields( $settings, $metas ) {
+	private function prepare_custom_fields( $settings, $metas, $form_id ) {
 		if ( empty( $settings['custom_fields'] ) || ! is_array( $settings['custom_fields'] ) ) {
 			return array();
 		}
 
+		$form_custom_fields = isset( $settings['custom_fields'][ $form_id ] ) ? $settings['custom_fields'][ $form_id ] : array();
+
 		$prepared = array();
 
-		foreach ( $settings['custom_fields'] as $custom ) {
+		foreach ( $form_custom_fields as $custom ) {
 			$ghl_id = isset( $custom['ghl_field_id'] ) ? $custom['ghl_field_id'] : '';
 			$field  = isset( $custom['form_field_id'] ) ? (int) $custom['form_field_id'] : 0;
 

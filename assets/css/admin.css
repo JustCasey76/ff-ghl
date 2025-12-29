@@ -32,4 +32,20 @@
 	max-height: 320px;
 }
 
+.aqm-ghl-form-block {
+	border: 1px solid #dcdcde;
+	padding: 16px;
+	margin-bottom: 16px;
+	background: #fff;
+}
+
+.aqm-ghl-form-block h3 {
+	margin-top: 0;
+}
+
+.aqm-ghl-form-block label {
+	display: block;
+	margin-bottom: 8px;
+}
+
 

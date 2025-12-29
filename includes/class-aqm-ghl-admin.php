@@ -68,6 +68,13 @@ class AQM_GHL_Admin {
 		);
 
 		$current_settings = aqm_ghl_get_settings();
+		$form_options     = array();
+		foreach ( $forms as $form ) {
+			$form_options[] = array(
+				'id'   => (int) $form->id,
+				'name' => $form->name,
+			);
+		}
 
 		wp_localize_script(
 			'aqm-ghl-admin',
@@ -75,9 +82,10 @@ class AQM_GHL_Admin {
 			array(
 				'nonce'         => wp_create_nonce( 'aqm_ghl_admin' ),
 				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
-				'selectedForm'  => absint( $current_settings['form_id'] ),
+				'selectedForms' => isset( $current_settings['form_ids'] ) && is_array( $current_settings['form_ids'] ) ? array_map( 'absint', $current_settings['form_ids'] ) : array(),
 				'mapping'       => isset( $current_settings['mapping'] ) ? $current_settings['mapping'] : array(),
 				'customFields'  => isset( $current_settings['custom_fields'] ) ? $current_settings['custom_fields'] : array(),
+				'forms'         => $form_options,
 				'optionKey'     => AQM_GHL_OPTION_KEY,
 				'labels'        => array(
 					'loading' => __( 'Loading fields…', 'aqm-ghl' ),
@@ -134,56 +142,24 @@ class AQM_GHL_Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="aqm-ghl-form-select"><?php esc_html_e( 'Formidable Form', 'aqm-ghl' ); ?></label></th>
+						<th scope="row"><label for="aqm-ghl-form-select"><?php esc_html_e( 'Formidable Forms', 'aqm-ghl' ); ?></label></th>
 						<td>
-							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[form_id]" id="aqm-ghl-form-select" class="regular-text">
-								<option value=""><?php esc_html_e( 'Select a form', 'aqm-ghl' ); ?></option>
+							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[form_ids][]" id="aqm-ghl-form-select" class="regular-text" multiple size="6">
 								<?php foreach ( $forms as $form ) : ?>
-									<option value="<?php echo esc_attr( $form->id ); ?>" <?php selected( (int) $settings['form_id'], (int) $form->id ); ?>>
+									<option value="<?php echo esc_attr( $form->id ); ?>" <?php echo in_array( (int) $form->id, isset( $settings['form_ids'] ) ? (array) $settings['form_ids'] : array(), true ) ? 'selected' : ''; ?>>
 										<?php echo esc_html( $form->name ); ?>
 									</option>
 								<?php endforeach; ?>
 							</select>
-							<p class="description"><?php esc_html_e( 'Choose the form whose submissions will be sent to GoHighLevel.', 'aqm-ghl' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Select one or more forms to send to GoHighLevel.', 'aqm-ghl' ); ?></p>
 						</td>
 					</tr>
 				</table>
 
 				<h2><?php esc_html_e( 'Field Mapping', 'aqm-ghl' ); ?></h2>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row"><label for="aqm-ghl-map-email"><?php esc_html_e( 'Email (required)', 'aqm-ghl' ); ?></label></th>
-						<td>
-							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[mapping][email]" id="aqm-ghl-map-email" class="regular-text aqm-ghl-field-select"></select>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="aqm-ghl-map-phone"><?php esc_html_e( 'Phone (optional)', 'aqm-ghl' ); ?></label></th>
-						<td>
-							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[mapping][phone]" id="aqm-ghl-map-phone" class="regular-text aqm-ghl-field-select"></select>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="aqm-ghl-map-first-name"><?php esc_html_e( 'First Name', 'aqm-ghl' ); ?></label></th>
-						<td>
-							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[mapping][first_name]" id="aqm-ghl-map-first-name" class="regular-text aqm-ghl-field-select"></select>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><label for="aqm-ghl-map-last-name"><?php esc_html_e( 'Last Name', 'aqm-ghl' ); ?></label></th>
-						<td>
-							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[mapping][last_name]" id="aqm-ghl-map-last-name" class="regular-text aqm-ghl-field-select"></select>
-						</td>
-					</tr>
-				</table>
-
-				<h2><?php esc_html_e( 'Custom Fields', 'aqm-ghl' ); ?></h2>
-				<div id="aqm-ghl-custom-fields">
-					<!-- Rows injected by JS -->
+				<div id="aqm-ghl-form-mapping-containers">
+					<!-- Per-form mapping containers injected by JS -->
 				</div>
-				<p>
-					<button type="button" class="button" id="aqm-ghl-add-custom-field"><?php esc_html_e( 'Add Custom Field', 'aqm-ghl' ); ?></button>
-				</p>
 
 				<h2><?php esc_html_e( 'Optional Settings', 'aqm-ghl' ); ?></h2>
 				<table class="form-table" role="presentation">
@@ -252,8 +228,8 @@ class AQM_GHL_Admin {
 	 * @return array
 	 */
 	public function sanitize_settings( $input ) {
-		$existing       = aqm_ghl_get_settings();
-		$sanitized      = array();
+		$existing             = aqm_ghl_get_settings();
+		$sanitized            = array();
 		$sanitized['location_id'] = isset( $input['location_id'] ) ? sanitize_text_field( $input['location_id'] ) : '';
 
 		$token = isset( $input['private_token'] ) ? trim( wp_unslash( $input['private_token'] ) ) : '';
@@ -263,15 +239,33 @@ class AQM_GHL_Admin {
 			$sanitized['private_token'] = sanitize_text_field( $token );
 		}
 
-		$sanitized['form_id'] = isset( $input['form_id'] ) ? absint( $input['form_id'] ) : '';
+		$form_ids = array();
+		if ( isset( $input['form_ids'] ) && is_array( $input['form_ids'] ) ) {
+			foreach ( $input['form_ids'] as $fid ) {
+				$fid = absint( $fid );
+				if ( $fid ) {
+					$form_ids[] = $fid;
+				}
+			}
+		}
+		$sanitized['form_ids'] = $form_ids;
 
 		$mapping = isset( $input['mapping'] ) && is_array( $input['mapping'] ) ? $input['mapping'] : array();
-		$sanitized['mapping'] = array(
-			'email'      => isset( $mapping['email'] ) ? absint( $mapping['email'] ) : '',
-			'phone'      => isset( $mapping['phone'] ) ? absint( $mapping['phone'] ) : '',
-			'first_name' => isset( $mapping['first_name'] ) ? absint( $mapping['first_name'] ) : '',
-			'last_name'  => isset( $mapping['last_name'] ) ? absint( $mapping['last_name'] ) : '',
-		);
+		$sanitized['mapping'] = array();
+		if ( ! empty( $mapping ) ) {
+			foreach ( $mapping as $fid => $map_values ) {
+				$fid = absint( $fid );
+				if ( ! $fid ) {
+					continue;
+				}
+				$sanitized['mapping'][ $fid ] = array(
+					'email'      => isset( $map_values['email'] ) ? absint( $map_values['email'] ) : '',
+					'phone'      => isset( $map_values['phone'] ) ? absint( $map_values['phone'] ) : '',
+					'first_name' => isset( $map_values['first_name'] ) ? absint( $map_values['first_name'] ) : '',
+					'last_name'  => isset( $map_values['last_name'] ) ? absint( $map_values['last_name'] ) : '',
+				);
+			}
+		}
 
 		$custom_fields = isset( $input['custom_fields'] ) ? $input['custom_fields'] : array();
 		$sanitized['custom_fields'] = aqm_ghl_sanitize_custom_fields( $custom_fields );
