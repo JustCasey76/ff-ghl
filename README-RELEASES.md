@@ -24,3 +24,11 @@ Creates tag `v1.1.0`, release, and uploads the ZIP to `JustCasey76/ff-ghl`.
 - If you change the plugin slug, update the slug in both scripts.
 - For CI automation, mirror the pattern from `aqm-chatbot` (GitHub Actions) if desired.
 
+## FTP Deploy Package (changed files only)
+Creates `FTP-Deploy/` with only changed files since the last run.
+```powershell
+cd scripts
+.\create-ftp-deploy.ps1
+```
+Re-run to refresh with only new changes. State is tracked in `.last-ftp-deploy.json` (ignored by git).
+
