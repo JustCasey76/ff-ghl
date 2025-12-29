@@ -68,6 +68,7 @@ class AQM_GHL_Admin {
 		);
 
 		$current_settings = aqm_ghl_get_settings();
+		$forms            = aqm_ghl_get_formidable_forms();
 		$form_options     = array();
 		foreach ( $forms as $form ) {
 			$form_options[] = array(
@@ -116,9 +117,9 @@ class AQM_GHL_Admin {
 					<p><?php esc_html_e( 'Formidable Forms is not active. Install and activate it to configure this integration.', 'aqm-ghl' ); ?></p>
 				</div>
 			<?php endif; ?>
-			<?php if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) || empty( $settings['form_id'] ) ) : ?>
+			<?php if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) || empty( $settings['form_ids'] ) ) : ?>
 				<div class="notice notice-warning">
-					<p><?php esc_html_e( 'Configuration incomplete. Add your GoHighLevel credentials and select a Formidable form.', 'aqm-ghl' ); ?></p>
+					<p><?php esc_html_e( 'Configuration incomplete. Add your GoHighLevel credentials and select at least one Formidable form.', 'aqm-ghl' ); ?></p>
 				</div>
 			<?php endif; ?>
 
@@ -239,10 +240,20 @@ class AQM_GHL_Admin {
 			$sanitized['private_token'] = sanitize_text_field( $token );
 		}
 
+		// Handle form_ids - can be array or empty
 		$form_ids = array();
-		if ( isset( $input['form_ids'] ) && is_array( $input['form_ids'] ) ) {
-			foreach ( $input['form_ids'] as $fid ) {
-				$fid = absint( $fid );
+		if ( isset( $input['form_ids'] ) ) {
+			// Handle both array and single value (in case WordPress sends it differently)
+			if ( is_array( $input['form_ids'] ) ) {
+				foreach ( $input['form_ids'] as $fid ) {
+					$fid = absint( $fid );
+					if ( $fid ) {
+						$form_ids[] = $fid;
+					}
+				}
+			} elseif ( ! empty( $input['form_ids'] ) ) {
+				// Single value case
+				$fid = absint( $input['form_ids'] );
 				if ( $fid ) {
 					$form_ids[] = $fid;
 				}

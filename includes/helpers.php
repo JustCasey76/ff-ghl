@@ -22,6 +22,13 @@ if ( ! function_exists( 'aqm_ghl_get_settings' ) ) {
 		);
 
 		$settings = get_option( AQM_GHL_OPTION_KEY, array() );
+		
+		// Migrate old form_id (singular) to form_ids (plural array)
+		if ( ! empty( $settings['form_id'] ) && empty( $settings['form_ids'] ) ) {
+			$settings['form_ids'] = array( absint( $settings['form_id'] ) );
+			unset( $settings['form_id'] );
+			update_option( AQM_GHL_OPTION_KEY, $settings );
+		}
 
 		return wp_parse_args( is_array( $settings ) ? $settings : array(), $defaults );
 	}
