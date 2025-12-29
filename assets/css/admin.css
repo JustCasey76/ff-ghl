@@ -1,0 +1,35 @@
+.aqm-ghl-wrap .form-table th {
+	width: 220px;
+}
+
+.aqm-ghl-custom-field-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 8px;
+	align-items: center;
+}
+
+.aqm-ghl-custom-field-row input.regular-text {
+	min-width: 260px;
+}
+
+.aqm-ghl-custom-field-row select.regular-text {
+	min-width: 220px;
+}
+
+.aqm-ghl-wrap h2 {
+	margin-top: 24px;
+}
+
+.aqm-ghl-wrap pre {
+	white-space: pre-wrap;
+	word-wrap: break-word;
+	overflow: auto;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	padding: 10px;
+	max-height: 320px;
+}
+
+
