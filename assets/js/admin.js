@@ -220,6 +220,7 @@
 					existingMap,
 					fieldsCount: fields.length,
 					settingsMapping: settings.mapping,
+					containerVisible: container.is(':visible'),
 				});
 				
 				// Try auto-mapping only for empty fields (preserves existing manual mappings)
@@ -227,6 +228,9 @@
 				const finalMap = { ...existingMap, ...autoMapped };
 				
 				console.log(`[AQM GHL] Final mapping for form ${formIdInt}:`, finalMap);
+				
+				// Ensure container is visible
+				container.show();
 				
 				container.find('select.aqm-ghl-field-select').each(function () {
 					const $select = $(this);
@@ -244,6 +248,11 @@
 					}, 100);
 				});
 				renderCustomFields(formIdInt, container, fields);
+			})
+			.catch((error) => {
+				console.error(`[AQM GHL] Error loading fields for form ${formIdInt}:`, error);
+				// Still show the container even if fields fail to load
+				container.show();
 			})
 			.catch(() => {
 				container.find('select.aqm-ghl-field-select').each(function () {
@@ -332,18 +341,35 @@
 		});
 
 		// Initial load - build blocks for all selected forms and any forms with saved mappings
+		// First, get selected forms from the actual select element (in case settings haven't loaded yet)
+		const selectedFromDOM = ($formSelect.val() || []).map((v) => parseInt(v, 10)).filter(Boolean);
 		const initialSelected = (settings.selectedForms || []).map((v) => parseInt(v, 10)).filter(Boolean);
 		const formsWithMappings = Object.keys(settings.mapping || {}).map((v) => parseInt(v, 10)).filter(Boolean);
-		const formsToLoad = [...new Set([...initialSelected, ...formsWithMappings])]; // Combine and deduplicate
+		// Combine all sources and deduplicate
+		const formsToLoad = [...new Set([...selectedFromDOM, ...initialSelected, ...formsWithMappings])];
+		
+		console.log('[AQM GHL] Initial load - forms to load:', {
+			selectedFromDOM,
+			initialSelected,
+			formsWithMappings,
+			formsToLoad,
+			settings: settings
+		});
 		
 		if (formsToLoad.length) {
 			formsToLoad.forEach((fid) => {
 				const fidInt = parseInt(fid, 10);
+				console.log(`[AQM GHL] Creating initial block for form ${fidInt}`);
 				const block = buildMappingContainer(fidInt);
 				existingBlocks[fidInt] = block;
 				$mappingContainers.append(block);
 			});
+		} else {
+			console.warn('[AQM GHL] No forms to load on initial page load');
 		}
+		
+		// Also trigger refresh to ensure everything is visible
+		refreshFormBlocks();
 
 		$testButton.on('click', function (e) {
 			e.preventDefault();
