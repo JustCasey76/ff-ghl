@@ -26,11 +26,12 @@
 
 	/**
 	 * Auto-map fields based on label patterns.
-	 * Only maps if the current mapping is empty.
+	 * Only auto-maps fields that are currently empty - preserves existing manual mappings.
+	 * Users can still manually override any auto-mapped field.
 	 *
 	 * @param {Array} fields - Array of field objects with id and label.
 	 * @param {Object} existingMap - Current mapping object.
-	 * @returns {Object} Auto-mapped values.
+	 * @returns {Object} Auto-mapped values (only for empty fields).
 	 */
 	function autoMapFields(fields, existingMap) {
 		const autoMap = {};
@@ -74,18 +75,10 @@
 			],
 		};
 
-		// Only auto-map if existing mapping is empty
-		const shouldAutoMap = !existingMap || Object.keys(existingMap).length === 0 || 
-			Object.values(existingMap).every(val => !val || val === '');
-
-		if (!shouldAutoMap) {
-			console.log('[AQM GHL] Skipping auto-map - existing mappings found');
-			return autoMap;
-		}
-
 		mappingFields.forEach((key) => {
-			// Skip if already mapped
-			if (existingMap && existingMap[key]) {
+			// Skip if already mapped - only auto-map empty fields
+			if (existingMap && existingMap[key] && existingMap[key] !== '') {
+				console.log(`[AQM GHL] Skipping auto-map for ${key} - already mapped to field ID ${existingMap[key]}`);
 				return;
 			}
 
@@ -225,7 +218,7 @@
 			.then((fields) => {
 				console.log(`[AQM GHL] Loading fields for form ${formIdInt}, existing map:`, existingMap);
 				
-				// Try auto-mapping if no existing mappings
+				// Try auto-mapping only for empty fields (preserves existing manual mappings)
 				const autoMapped = autoMapFields(fields, existingMap);
 				const finalMap = { ...existingMap, ...autoMapped };
 				
