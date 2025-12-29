@@ -84,6 +84,40 @@ class AQM_GHL_Updater {
 		add_action( 'admin_init', array( $this, 'maybe_reactivate_plugin' ) );
 		add_action( 'admin_init', array( $this, 'force_refresh_on_plugins_page' ) );
 		add_filter( 'http_request_args', array( $this, 'add_auth_to_download' ), 10, 2 );
+		
+		// Add admin action to clear cache
+		add_action( 'admin_post_aqm_ghl_clear_update_cache', array( $this, 'clear_cache_action' ) );
+	}
+	
+	/**
+	 * Clear update cache (admin action handler)
+	 */
+	public function clear_cache_action() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Unauthorized' );
+		}
+		
+		check_admin_referer( 'aqm_ghl_clear_cache' );
+		
+		$cache_key = 'aqm_ghl_github_data_' . md5( $this->username . $this->repository );
+		delete_transient( $cache_key );
+		delete_option( '_transient_' . $cache_key );
+		delete_option( '_transient_timeout_' . $cache_key );
+		delete_site_transient( 'update_plugins' );
+		
+		wp_redirect( admin_url( 'plugins.php?aqm_ghl_cache_cleared=1' ) );
+		exit;
+	}
+	
+	/**
+	 * Clear update cache (public method)
+	 */
+	public static function clear_cache() {
+		$cache_key = 'aqm_ghl_github_data_' . md5( 'JustCasey76' . 'ff-ghl' );
+		delete_transient( $cache_key );
+		delete_option( '_transient_' . $cache_key );
+		delete_option( '_transient_timeout_' . $cache_key );
+		delete_site_transient( 'update_plugins' );
 	}
 
 	/**
@@ -105,10 +139,18 @@ class AQM_GHL_Updater {
 		// If on plugins page, force check (bypass cache) to ensure latest version is shown
 		$force_check = $is_plugins_page;
 		
+		// Log for debugging
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( '[AQM GHL Updater] Checking for updates. Plugin: ' . $this->plugin_basename . ', Current version: ' . $this->plugin_data['Version'] );
+		}
+		
 		// Get update data from GitHub
 		$update_data = $this->get_github_update_data( $force_check );
 
 		if ( ! $update_data ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[AQM GHL Updater] No update data received from GitHub' );
+			}
 			return $transient;
 		}
 		
@@ -116,14 +158,22 @@ class AQM_GHL_Updater {
 		$latest_version = ltrim( $update_data->tag_name, 'v' );
 		$current_version = $this->plugin_data['Version'];
 		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( '[AQM GHL Updater] Latest version from GitHub: ' . $latest_version . ', Current: ' . $current_version );
+		}
+		
 		// Enhanced version comparison
 		$comparison_result = version_compare( $current_version, $latest_version, '<' );
+		
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( '[AQM GHL Updater] Update needed: ' . ( $comparison_result ? 'YES' : 'NO' ) );
+		}
 		
 		// If update data is available and version is newer, add to transient
 		if ( $comparison_result ) {
 			// Create the plugin info object
 			$plugin_info = new stdClass();
-			$plugin_info->slug = $this->repository;
+			$plugin_info->slug = dirname( $this->plugin_basename ); // Use directory name as slug
 			$plugin_info->plugin = $this->plugin_basename;
 			$plugin_info->new_version = ltrim( $update_data->tag_name, 'v' );
 			$plugin_info->url = $update_data->html_url;
@@ -131,6 +181,10 @@ class AQM_GHL_Updater {
 
 			// Add to transient
 			$transient->response[ $this->plugin_basename ] = $plugin_info;
+			
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( '[AQM GHL Updater] Added update to transient. New version: ' . $plugin_info->new_version );
+			}
 		}
 		
 		return $transient;
@@ -179,6 +233,19 @@ class AQM_GHL_Updater {
 		) );
 
 		$data = false;
+
+		// Log response for debugging
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			if ( is_wp_error( $response ) ) {
+				error_log( '[AQM GHL Updater] GitHub API error: ' . $response->get_error_message() );
+			} else {
+				$response_code = wp_remote_retrieve_response_code( $response );
+				error_log( '[AQM GHL Updater] GitHub API response code: ' . $response_code );
+				if ( $response_code !== 200 ) {
+					error_log( '[AQM GHL Updater] GitHub API response body: ' . wp_remote_retrieve_body( $response ) );
+				}
+			}
+		}
 
 		// If releases API works, use it
 		if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
@@ -299,7 +366,9 @@ class AQM_GHL_Updater {
 	 */
 	public function plugin_info( $result, $action, $args ) {
 		// Check if this is the right plugin
-		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $this->repository ) {
+		// WordPress uses the plugin directory name as the slug, not the repository name
+		$plugin_slug = dirname( $this->plugin_basename );
+		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $plugin_slug ) {
 			return $result;
 		}
 
