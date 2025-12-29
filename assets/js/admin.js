@@ -174,11 +174,6 @@
 				container.find('select.aqm-ghl-field-select').each(function () {
 					setSelectOptions($(this), [], '');
 				});
-			})
-			.catch(() => {
-				container.find('select.aqm-ghl-field-select').each(function () {
-					setSelectOptions($(this), [], '');
-				});
 				renderCustomFields(formIdInt, container, []);
 			});
 
