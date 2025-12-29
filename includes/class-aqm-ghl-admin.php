@@ -77,6 +77,24 @@ class AQM_GHL_Admin {
 			);
 		}
 
+		// Normalize mapping keys to integers for consistent JavaScript access
+		$mapping_normalized = array();
+		if ( ! empty( $current_settings['mapping'] ) && is_array( $current_settings['mapping'] ) ) {
+			foreach ( $current_settings['mapping'] as $fid => $map ) {
+				$fid_int = absint( $fid );
+				$mapping_normalized[ $fid_int ] = $map;
+			}
+		}
+
+		// Normalize custom fields keys to integers
+		$custom_fields_normalized = array();
+		if ( ! empty( $current_settings['custom_fields'] ) && is_array( $current_settings['custom_fields'] ) ) {
+			foreach ( $current_settings['custom_fields'] as $fid => $fields ) {
+				$fid_int = absint( $fid );
+				$custom_fields_normalized[ $fid_int ] = $fields;
+			}
+		}
+
 		wp_localize_script(
 			'aqm-ghl-admin',
 			'aqmGhlSettings',
@@ -84,8 +102,8 @@ class AQM_GHL_Admin {
 				'nonce'         => wp_create_nonce( 'aqm_ghl_admin' ),
 				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
 				'selectedForms' => isset( $current_settings['form_ids'] ) && is_array( $current_settings['form_ids'] ) ? array_map( 'absint', $current_settings['form_ids'] ) : array(),
-				'mapping'       => isset( $current_settings['mapping'] ) ? $current_settings['mapping'] : array(),
-				'customFields'  => isset( $current_settings['custom_fields'] ) ? $current_settings['custom_fields'] : array(),
+				'mapping'       => $mapping_normalized,
+				'customFields'  => $custom_fields_normalized,
 				'forms'         => $form_options,
 				'optionKey'     => AQM_GHL_OPTION_KEY,
 				'labels'        => array(
@@ -266,14 +284,18 @@ class AQM_GHL_Admin {
 		$existing_custom_fields = isset( $existing['custom_fields'] ) && is_array( $existing['custom_fields'] ) ? $existing['custom_fields'] : array();
 		
 		// Process new mapping data from form submission
+		// Only update mappings for forms that are currently selected (have mapping data in POST)
 		$mapping = isset( $input['mapping'] ) && is_array( $input['mapping'] ) ? $input['mapping'] : array();
-		$sanitized['mapping'] = $existing_mapping; // Start with existing
+		$sanitized['mapping'] = $existing_mapping; // Start with existing - preserve all
+		
+		// Only update mappings for forms that are in the POST data (currently visible/selected forms)
 		if ( ! empty( $mapping ) ) {
 			foreach ( $mapping as $fid => $map_values ) {
 				$fid = absint( $fid );
 				if ( ! $fid ) {
 					continue;
 				}
+				// Update this form's mapping - allow empty values (user can clear a mapping)
 				$sanitized['mapping'][ $fid ] = array(
 					'email'      => isset( $map_values['email'] ) ? absint( $map_values['email'] ) : '',
 					'phone'      => isset( $map_values['phone'] ) ? absint( $map_values['phone'] ) : '',
@@ -282,6 +304,9 @@ class AQM_GHL_Admin {
 				);
 			}
 		}
+		
+		// Clean up mappings for forms that are no longer in form_ids (optional cleanup)
+		// But preserve them in case user wants to reselect later - so we don't do cleanup
 
 		// Process new custom fields data from form submission
 		// The input comes as per-form structure: [form_id] => [ [ghl_field_id, form_field_id], ... ]

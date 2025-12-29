@@ -25,13 +25,14 @@
 	}
 
 	function addCustomFieldRow(formId, container, data, fields) {
+		const formIdInt = parseInt(formId, 10);
 		const ghlFieldId = data && data.ghl_field_id ? data.ghl_field_id : '';
 		const formFieldId = data && data.form_field_id ? data.form_field_id : '';
 
 		const row = $(`
 			<div class="aqm-ghl-custom-field-row">
-				<input type="text" name="${settings.optionKey || 'aqm_ghl_connector_settings'}[custom_fields][${formId}][][ghl_field_id]" placeholder="GHL Custom Field ID" value="${ghlFieldId ? $('<div>').text(ghlFieldId).html() : ''}" class="regular-text aqm-ghl-custom-ghl" />
-				<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[custom_fields][${formId}][][form_field_id]" class="regular-text aqm-ghl-custom-select"></select>
+				<input type="text" name="${settings.optionKey || 'aqm_ghl_connector_settings'}[custom_fields][${formIdInt}][][ghl_field_id]" placeholder="GHL Custom Field ID" value="${ghlFieldId ? $('<div>').text(ghlFieldId).html() : ''}" class="regular-text aqm-ghl-custom-ghl" />
+				<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[custom_fields][${formIdInt}][][form_field_id]" class="regular-text aqm-ghl-custom-select"></select>
 				<button type="button" class="button-link-delete aqm-ghl-remove-custom-field">Remove</button>
 			</div>
 		`);
@@ -47,9 +48,10 @@
 	}
 
 	function renderCustomFields(formId, container, fields) {
+		const formIdInt = parseInt(formId, 10);
 		container.find('.aqm-ghl-custom-fields').empty();
 		const existingByForm = settings.customFields || {};
-		const existing = existingByForm[formId] || [];
+		const existing = existingByForm[formIdInt] || [];
 
 		if (existing.length === 0) {
 			addCustomFieldRow(formId, container, null, fields);
@@ -60,14 +62,15 @@
 	}
 
 	function loadFields(formId) {
-		if (formFieldsCache[formId]) {
-			return Promise.resolve(formFieldsCache[formId]);
+		const formIdInt = parseInt(formId, 10);
+		if (formFieldsCache[formIdInt]) {
+			return Promise.resolve(formFieldsCache[formIdInt]);
 		}
 
 		const data = new URLSearchParams();
 		data.append('action', 'aqm_ghl_get_form_fields');
 		data.append('nonce', settings.nonce);
-		data.append('form_id', formId);
+		data.append('form_id', formIdInt);
 
 		return fetch(settings.ajaxUrl, {
 			method: 'POST',
@@ -80,61 +83,65 @@
 				if (!json || !json.success || !json.data || !Array.isArray(json.data.fields)) {
 					throw new Error('Unable to load fields');
 				}
-				formFieldsCache[formId] = json.data.fields;
+				formFieldsCache[formIdInt] = json.data.fields;
 				return json.data.fields;
 			});
 	}
 
 	function buildMappingContainer(formId) {
-		const form = formsList.find((f) => parseInt(f.id, 10) === parseInt(formId, 10));
+		const formIdInt = parseInt(formId, 10);
+		const form = formsList.find((f) => parseInt(f.id, 10) === formIdInt);
 		const formName = form ? form.name : `Form ${formId}`;
 		const mappingByForm = settings.mapping || {};
 		const customByForm = settings.customFields || {};
-		const existingMap = mappingByForm[formId] || {};
+		// Use integer key (normalized from PHP)
+		const existingMap = mappingByForm[formIdInt] || {};
 
 		const container = $(`
-			<div class="aqm-ghl-form-block" data-form-id="${formId}">
+			<div class="aqm-ghl-form-block" data-form-id="${formIdInt}">
 				<h3>${formName}</h3>
 				<div class="aqm-ghl-mapping-rows">
 					<label>Email (required)
-						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formId}][email]" class="regular-text aqm-ghl-field-select" data-map-key="email"></select>
+						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formIdInt}][email]" class="regular-text aqm-ghl-field-select" data-map-key="email"></select>
 					</label>
 					<label>Phone (optional)
-						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formId}][phone]" class="regular-text aqm-ghl-field-select" data-map-key="phone"></select>
+						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formIdInt}][phone]" class="regular-text aqm-ghl-field-select" data-map-key="phone"></select>
 					</label>
 					<label>First Name
-						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formId}][first_name]" class="regular-text aqm-ghl-field-select" data-map-key="first_name"></select>
+						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formIdInt}][first_name]" class="regular-text aqm-ghl-field-select" data-map-key="first_name"></select>
 					</label>
 					<label>Last Name
-						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formId}][last_name]" class="regular-text aqm-ghl-field-select" data-map-key="last_name"></select>
+						<select name="${settings.optionKey || 'aqm_ghl_connector_settings'}[mapping][${formIdInt}][last_name]" class="regular-text aqm-ghl-field-select" data-map-key="last_name"></select>
 					</label>
 				</div>
 				<h4>Custom Fields</h4>
 				<div class="aqm-ghl-custom-fields"></div>
-				<p><button type="button" class="button aqm-ghl-add-custom-field" data-form-id="${formId}">Add Custom Field</button></p>
+				<p><button type="button" class="button aqm-ghl-add-custom-field" data-form-id="${formIdInt}">Add Custom Field</button></p>
 			</div>
 		`);
 
-		loadFields(formId)
+		loadFields(formIdInt)
 			.then((fields) => {
+				console.log(`[AQM GHL] Loading fields for form ${formIdInt}, existing map:`, existingMap);
 				container.find('select.aqm-ghl-field-select').each(function () {
 					const key = $(this).data('map-key');
 					const selected = existingMap && existingMap[key] ? existingMap[key] : '';
+					console.log(`[AQM GHL] Setting ${key} to ${selected} for form ${formIdInt}`);
 					setSelectOptions($(this), fields, selected);
 				});
-				renderCustomFields(formId, container, fields);
+				renderCustomFields(formIdInt, container, fields);
 			})
 			.catch(() => {
 				container.find('select.aqm-ghl-field-select').each(function () {
 					setSelectOptions($(this), [], '');
 				});
-				renderCustomFields(formId, container, []);
+				renderCustomFields(formIdInt, container, []);
 			});
 
 		container.on('click', '.aqm-ghl-add-custom-field', function (e) {
 			e.preventDefault();
-			const fields = formFieldsCache[formId] || [];
-			addCustomFieldRow(formId, container, null, fields);
+			const fields = formFieldsCache[formIdInt] || [];
+			addCustomFieldRow(formIdInt, container, null, fields);
 		});
 
 		container.on('click', '.aqm-ghl-remove-custom-field', function (e) {
@@ -172,11 +179,12 @@
 
 			// Show or create blocks for selected forms
 			selected.forEach((fid) => {
-				let block = existingBlocks[fid];
+				const fidInt = parseInt(fid, 10);
+				let block = existingBlocks[fidInt];
 				if (!block || !block.length) {
 					// Create new block if it doesn't exist
-					block = buildMappingContainer(fid);
-					existingBlocks[fid] = block;
+					block = buildMappingContainer(fidInt);
+					existingBlocks[fidInt] = block;
 					$mappingContainers.append(block);
 				} else {
 					// Show existing block
@@ -193,8 +201,9 @@
 		const initialSelected = (settings.selectedForms || []).map((v) => parseInt(v, 10)).filter(Boolean);
 		if (initialSelected.length) {
 			initialSelected.forEach((fid) => {
-				const block = buildMappingContainer(fid);
-				existingBlocks[fid] = block;
+				const fidInt = parseInt(fid, 10);
+				const block = buildMappingContainer(fidInt);
+				existingBlocks[fidInt] = block;
 				$mappingContainers.append(block);
 			});
 		}
