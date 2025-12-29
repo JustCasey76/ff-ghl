@@ -24,6 +24,107 @@
 		});
 	}
 
+	/**
+	 * Auto-map fields based on label patterns.
+	 * Only maps if the current mapping is empty.
+	 *
+	 * @param {Array} fields - Array of field objects with id and label.
+	 * @param {Object} existingMap - Current mapping object.
+	 * @returns {Object} Auto-mapped values.
+	 */
+	function autoMapFields(fields, existingMap) {
+		const autoMap = {};
+		const labelPatterns = {
+			email: [
+				/^email$/i,
+				/^e-mail$/i,
+				/^e mail$/i,
+				/email address/i,
+				/email addr/i,
+				/^email$/i,
+			],
+			phone: [
+				/^phone$/i,
+				/^telephone$/i,
+				/^tel$/i,
+				/phone number/i,
+				/phone #/i,
+				/mobile/i,
+				/cell/i,
+				/cell phone/i,
+				/mobile phone/i,
+			],
+			first_name: [
+				/^first name$/i,
+				/^first$/i,
+				/^fname$/i,
+				/^f\.?name$/i,
+				/firstname/i,
+				/^given name$/i,
+				/^name$/i, // Only if no last_name match
+			],
+			last_name: [
+				/^last name$/i,
+				/^last$/i,
+				/^lname$/i,
+				/^l\.?name$/i,
+				/lastname/i,
+				/^surname$/i,
+				/^family name$/i,
+			],
+		};
+
+		// Only auto-map if existing mapping is empty
+		const shouldAutoMap = !existingMap || Object.keys(existingMap).length === 0 || 
+			Object.values(existingMap).every(val => !val || val === '');
+
+		if (!shouldAutoMap) {
+			console.log('[AQM GHL] Skipping auto-map - existing mappings found');
+			return autoMap;
+		}
+
+		mappingFields.forEach((key) => {
+			// Skip if already mapped
+			if (existingMap && existingMap[key]) {
+				return;
+			}
+
+			const patterns = labelPatterns[key] || [];
+			let matchedField = null;
+
+			// Try exact matches first
+			for (const field of fields) {
+				const label = (field.label || '').trim();
+				if (!label) continue;
+
+				for (const pattern of patterns) {
+					if (pattern.test(label)) {
+						// Special handling for "name" - only match if it's likely first name
+						if (key === 'first_name' && /^name$/i.test(label)) {
+							// Check if there's a last_name field - if so, skip this match
+							const hasLastName = fields.some(f => 
+								labelPatterns.last_name.some(p => p.test(f.label || ''))
+							);
+							if (hasLastName) {
+								continue;
+							}
+						}
+						matchedField = field;
+						break;
+					}
+				}
+				if (matchedField) break;
+			}
+
+			if (matchedField) {
+				autoMap[key] = parseInt(matchedField.id, 10);
+				console.log(`[AQM GHL] Auto-mapped ${key} to field "${matchedField.label}" (ID: ${matchedField.id})`);
+			}
+		});
+
+		return autoMap;
+	}
+
 	function addCustomFieldRow(formId, container, data, fields) {
 		const formIdInt = parseInt(formId, 10);
 		const ghlFieldId = data && data.ghl_field_id ? data.ghl_field_id : '';
@@ -123,10 +224,15 @@
 		loadFields(formIdInt)
 			.then((fields) => {
 				console.log(`[AQM GHL] Loading fields for form ${formIdInt}, existing map:`, existingMap);
+				
+				// Try auto-mapping if no existing mappings
+				const autoMapped = autoMapFields(fields, existingMap);
+				const finalMap = { ...existingMap, ...autoMapped };
+				
 				container.find('select.aqm-ghl-field-select').each(function () {
 					const key = $(this).data('map-key');
-					const selected = existingMap && existingMap[key] ? existingMap[key] : '';
-					console.log(`[AQM GHL] Setting ${key} to ${selected} for form ${formIdInt}`);
+					const selected = finalMap && finalMap[key] ? finalMap[key] : '';
+					console.log(`[AQM GHL] Setting ${key} to ${selected} for form ${formIdInt}${autoMapped[key] ? ' (auto-mapped)' : ''}`);
 					setSelectOptions($(this), fields, selected);
 				});
 				renderCustomFields(formIdInt, container, fields);
