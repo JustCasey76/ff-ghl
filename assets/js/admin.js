@@ -263,6 +263,8 @@
 		const $testButton = $('#aqm-ghl-test-connection');
 		const $testResult = $('#aqm-ghl-test-result');
 		const $mappingContainers = $('#aqm-ghl-form-mapping-containers');
+		const $clearCacheButton = $('#aqm-ghl-clear-cache');
+		const $cacheResult = $('#aqm-ghl-cache-result');
 
 		console.info('[AQM GHL] Admin script initialized', {
 			hasTestButton: !!$testButton.length,
@@ -398,6 +400,55 @@
 				})
 				.finally(() => {
 					$testButton.prop('disabled', false).text('Send Test Contact');
+				});
+
+		// Clear update cache button
+		$clearCacheButton.on('click', function (e) {
+			e.preventDefault();
+			if ($clearCacheButton.prop('disabled')) {
+				return;
+			}
+
+			$cacheResult.hide().removeClass('notice-success notice-error').text('');
+			$clearCacheButton.prop('disabled', true).text('Clearing…');
+
+			const data = new URLSearchParams();
+			data.append('action', 'aqm_ghl_clear_update_cache');
+			data.append('nonce', settings.nonce);
+
+			fetch(settings.ajaxUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+				body: data.toString(),
+			})
+				.then((response) => response.json())
+				.then((json) => {
+					if (json && json.success) {
+						$cacheResult
+							.addClass('notice-success')
+							.removeClass('notice-error')
+							.html(json.data.message || 'Cache cleared successfully.')
+							.show();
+					} else {
+						const msg = (json && json.data && json.data.message) ? json.data.message : 'Failed to clear cache.';
+						$cacheResult
+							.addClass('notice-error')
+							.removeClass('notice-success')
+							.html(msg)
+							.show();
+					}
+				})
+				.catch((err) => {
+					console.error('[AQM GHL] Clear cache request failed', err);
+					$cacheResult
+						.addClass('notice-error')
+						.removeClass('notice-success')
+						.text('Failed to clear cache. Please check console/network.')
+						.show();
+				})
+				.finally(() => {
+					$clearCacheButton.prop('disabled', false).text('Clear Update Cache');
 				});
 		});
 	});

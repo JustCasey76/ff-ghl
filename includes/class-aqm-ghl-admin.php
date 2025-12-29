@@ -18,6 +18,7 @@ class AQM_GHL_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'wp_ajax_aqm_ghl_get_form_fields', array( $this, 'ajax_get_form_fields' ) );
 		add_action( 'wp_ajax_aqm_ghl_test_connection', array( $this, 'ajax_test_connection' ) );
+		add_action( 'wp_ajax_aqm_ghl_clear_update_cache', array( $this, 'ajax_clear_update_cache' ) );
 	}
 
 	/**
@@ -206,6 +207,25 @@ class AQM_GHL_Admin {
 					<button type="button" class="button button-secondary" id="aqm-ghl-test-connection"><?php esc_html_e( 'Send Test Contact', 'aqm-ghl' ); ?></button>
 				</p>
 				<div id="aqm-ghl-test-result" class="notice inline" style="display:none;"></div>
+
+				<h2><?php esc_html_e( 'Update Management', 'aqm-ghl' ); ?></h2>
+				<p><?php esc_html_e( 'If you uploaded files via FTP and WordPress is not detecting updates from GitHub, clear the update cache.', 'aqm-ghl' ); ?></p>
+				<p>
+					<button type="button" class="button button-secondary" id="aqm-ghl-clear-cache"><?php esc_html_e( 'Clear Update Cache', 'aqm-ghl' ); ?></button>
+					<span id="aqm-ghl-cache-result" class="notice inline" style="display:none; margin-left: 10px;"></span>
+				</p>
+				<p class="description">
+					<?php
+					$current_version = AQM_GHL_CONNECTOR_VERSION;
+					$github_token_set = defined( 'AQM_GHL_GITHUB_TOKEN' ) && ! empty( AQM_GHL_GITHUB_TOKEN );
+					printf(
+						/* translators: 1: current version, 2: token status */
+						esc_html__( 'Current version: %1$s | GitHub token: %2$s', 'aqm-ghl' ),
+						esc_html( $current_version ),
+						$github_token_set ? '<span style="color: green;">✓ Configured</span>' : '<span style="color: red;">✗ Not configured (required for private repos)</span>'
+					);
+					?>
+				</p>
 
 				<h2><?php esc_html_e( 'Last Test Result', 'aqm-ghl' ); ?></h2>
 				<?php if ( ! empty( $last_test['timestamp'] ) ) : ?>
@@ -489,6 +509,32 @@ class AQM_GHL_Admin {
 				'status'  => $code,
 				'payload' => $payload,
 				'response_body' => $body,
+			)
+		);
+	}
+
+	/**
+	 * AJAX handler to clear update cache.
+	 */
+	public function ajax_clear_update_cache() {
+		check_ajax_referer( 'aqm_ghl_admin', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'aqm-ghl' ) ), 403 );
+		}
+
+		// Clear GitHub update cache
+		if ( class_exists( 'AQM_GHL_Updater' ) ) {
+			AQM_GHL_Updater::clear_cache();
+		}
+
+		// Also clear WordPress update transients
+		delete_site_transient( 'update_plugins' );
+		wp_clean_plugins_cache( true );
+
+		wp_send_json_success(
+			array(
+				'message' => __( 'Update cache cleared successfully. Visit the Plugins page to check for updates.', 'aqm-ghl' ),
 			)
 		);
 	}
