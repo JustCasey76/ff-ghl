@@ -162,15 +162,28 @@ class AQM_GHL_Admin {
 						</td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="aqm-ghl-form-select"><?php esc_html_e( 'Formidable Forms', 'aqm-ghl' ); ?></label></th>
+						<th scope="row"><label><?php esc_html_e( 'Formidable Forms', 'aqm-ghl' ); ?></label></th>
 						<td>
-							<select name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[form_ids][]" id="aqm-ghl-form-select" class="regular-text" multiple size="6">
-								<?php foreach ( $forms as $form ) : ?>
-									<option value="<?php echo esc_attr( $form->id ); ?>" <?php echo in_array( (int) $form->id, isset( $settings['form_ids'] ) ? (array) $settings['form_ids'] : array(), true ) ? 'selected' : ''; ?>>
-										<?php echo esc_html( $form->name ); ?>
-									</option>
-								<?php endforeach; ?>
-							</select>
+							<div class="aqm-ghl-form-checkboxes">
+								<?php if ( ! empty( $forms ) ) : ?>
+									<?php foreach ( $forms as $form ) : ?>
+										<?php $is_checked = in_array( (int) $form->id, isset( $settings['form_ids'] ) ? (array) $settings['form_ids'] : array(), true ); ?>
+										<label class="aqm-ghl-form-checkbox-item">
+											<input 
+												type="checkbox" 
+												name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[form_ids][]" 
+												value="<?php echo esc_attr( $form->id ); ?>" 
+												class="aqm-ghl-form-checkbox"
+												data-form-id="<?php echo esc_attr( $form->id ); ?>"
+												<?php checked( $is_checked ); ?>
+											/>
+											<span class="aqm-ghl-form-checkbox-label"><?php echo esc_html( $form->name ); ?></span>
+										</label>
+									<?php endforeach; ?>
+								<?php else : ?>
+									<p class="description"><?php esc_html_e( 'No forms found. Please create a form in Formidable Forms first.', 'aqm-ghl' ); ?></p>
+								<?php endif; ?>
+							</div>
 							<p class="description"><?php esc_html_e( 'Select one or more forms to send to GoHighLevel.', 'aqm-ghl' ); ?></p>
 						</td>
 					</tr>

@@ -10,10 +10,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 class AQM_GHL_Handler {
 
 	/**
+	 * UTM Tracker instance.
+	 *
+	 * @var AQM_GHL_UTM_Tracker
+	 */
+	private $utm_tracker;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		add_action( 'frm_after_create_entry', array( $this, 'maybe_send_to_ghl' ), 20, 2 );
+		$this->utm_tracker = new AQM_GHL_UTM_Tracker();
 	}
 
 	/**
@@ -88,6 +96,9 @@ class AQM_GHL_Handler {
 		if ( ! empty( $custom_fields ) ) {
 			$payload['customFields'] = $custom_fields;
 		}
+
+		// Inject UTM parameters and GCLID
+		$payload = $this->inject_utm_data( $payload );
 
 		$payload = aqm_ghl_clean_payload( $payload );
 
@@ -182,6 +193,145 @@ class AQM_GHL_Handler {
 		}
 
 		return isset( $metas[ $field_id ] ) ? $metas[ $field_id ] : null;
+	}
+
+	/**
+	 * Inject UTM parameters and GCLID into the payload.
+	 *
+	 * Maps:
+	 * - gclid → customFields array (custom_gclid)
+	 * - utm_* → system fields if GHL supports them (source, medium, campaign)
+	 *
+	 * @param array $payload Existing payload array.
+	 * @return array Modified payload with UTM/GCLID data.
+	 */
+	private function inject_utm_data( $payload ) {
+		$params = $this->utm_tracker->get_tracked_parameters();
+
+		if ( empty( $params ) ) {
+			return $payload;
+		}
+
+		// Extract GCLID (goes to custom field)
+		$gclid = isset( $params['gclid'] ) ? $params['gclid'] : '';
+
+		// Extract UTM parameters
+		$utm_source   = isset( $params['utm_source'] ) ? $params['utm_source'] : '';
+		$utm_medium   = isset( $params['utm_medium'] ) ? $params['utm_medium'] : '';
+		$utm_campaign = isset( $params['utm_campaign'] ) ? $params['utm_campaign'] : '';
+		$utm_term     = isset( $params['utm_term'] ) ? $params['utm_term'] : '';
+		$utm_content  = isset( $params['utm_content'] ) ? $params['utm_content'] : '';
+
+		// Add GCLID to customFields array
+		if ( ! empty( $gclid ) ) {
+			if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
+				$payload['customFields'] = array();
+			}
+
+			// Check if gclid custom field already exists (don't overwrite form field data)
+			$gclid_exists = false;
+			foreach ( $payload['customFields'] as $key => $field ) {
+				if ( isset( $field['id'] ) && $field['id'] === 'custom_gclid' ) {
+					$gclid_exists = true;
+					break;
+				}
+			}
+
+			// Only add if it doesn't already exist
+			if ( ! $gclid_exists ) {
+				$payload['customFields'][] = array(
+					'id'    => 'custom_gclid',
+					'value' => $gclid,
+				);
+			}
+		}
+
+		// Add UTM parameters to customFields array
+		// Note: GHL API accepts custom fields with IDs like 'custom_utm_source', etc.
+		// If your GHL instance uses different field IDs, update them accordingly
+		$utm_custom_fields = array(
+			'utm_source'   => 'custom_utm_source',
+			'utm_medium'   => 'custom_utm_medium',
+			'utm_campaign' => 'custom_utm_campaign',
+		);
+
+		foreach ( $utm_custom_fields as $utm_param => $ghl_field_id ) {
+			$value = '';
+			if ( 'utm_source' === $utm_param && ! empty( $utm_source ) ) {
+				$value = $utm_source;
+			} elseif ( 'utm_medium' === $utm_param && ! empty( $utm_medium ) ) {
+				$value = $utm_medium;
+			} elseif ( 'utm_campaign' === $utm_param && ! empty( $utm_campaign ) ) {
+				$value = $utm_campaign;
+			}
+
+			if ( ! empty( $value ) ) {
+				if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
+					$payload['customFields'] = array();
+				}
+
+				// Check if field already exists (don't overwrite)
+				$field_exists = false;
+				foreach ( $payload['customFields'] as $field ) {
+					if ( isset( $field['id'] ) && $field['id'] === $ghl_field_id ) {
+						$field_exists = true;
+						break;
+					}
+				}
+
+				if ( ! $field_exists ) {
+					$payload['customFields'][] = array(
+						'id'    => $ghl_field_id,
+						'value' => $value,
+					);
+				}
+			}
+		}
+
+		// utm_term and utm_content typically go to custom fields
+		if ( ! empty( $utm_term ) ) {
+			if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
+				$payload['customFields'] = array();
+			}
+
+			$utm_term_exists = false;
+			foreach ( $payload['customFields'] as $field ) {
+				if ( isset( $field['id'] ) && $field['id'] === 'custom_utm_term' ) {
+					$utm_term_exists = true;
+					break;
+				}
+			}
+
+			if ( ! $utm_term_exists ) {
+				$payload['customFields'][] = array(
+					'id'    => 'custom_utm_term',
+					'value' => $utm_term,
+				);
+			}
+		}
+
+		if ( ! empty( $utm_content ) ) {
+			if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
+				$payload['customFields'] = array();
+			}
+
+			$utm_content_exists = false;
+			foreach ( $payload['customFields'] as $field ) {
+				if ( isset( $field['id'] ) && $field['id'] === 'custom_utm_content' ) {
+					$utm_content_exists = true;
+					break;
+				}
+			}
+
+			if ( ! $utm_content_exists ) {
+				$payload['customFields'][] = array(
+					'id'    => 'custom_utm_content',
+					'value' => $utm_content,
+				);
+			}
+		}
+
+		return $payload;
 	}
 
 }
