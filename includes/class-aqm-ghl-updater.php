@@ -252,43 +252,33 @@ class AQM_GHL_Updater {
 			$releases = json_decode( wp_remote_retrieve_body( $response ) );
 			
 			if ( ! empty( $releases ) && is_array( $releases ) ) {
-				// Filter out draft and prerelease versions - only use published releases
-				$published_releases = array_filter( $releases, function( $release ) {
-					return ! isset( $release->draft ) || ! $release->draft;
-				} );
-				$published_releases = array_filter( $published_releases, function( $release ) {
-					return ! isset( $release->prerelease ) || ! $release->prerelease;
+				// Sort releases by version (most recent first)
+				usort( $releases, function( $a, $b ) {
+					$version_a = ltrim( $a->tag_name, 'v' );
+					$version_b = ltrim( $b->tag_name, 'v' );
+					return version_compare( $version_b, $version_a );
 				} );
 				
-				if ( ! empty( $published_releases ) ) {
-					// Sort releases by version (most recent first)
-					usort( $published_releases, function( $a, $b ) {
-						$version_a = ltrim( $a->tag_name, 'v' );
-						$version_b = ltrim( $b->tag_name, 'v' );
-						return version_compare( $version_b, $version_a );
-					} );
-					
-					$latest_release = $published_releases[0];
-					
-					// Look for the plugin ZIP asset
-					$zip_url = false;
-					if ( ! empty( $latest_release->assets ) && is_array( $latest_release->assets ) ) {
-						foreach ( $latest_release->assets as $asset ) {
-							if ( isset( $asset->name ) && strpos( $asset->name, '.zip' ) !== false ) {
-								// Use browser_download_url for all cases (works for both public and private repos)
-								// The http_request_args filter will add authentication if needed
-								$zip_url = $asset->browser_download_url;
-								break;
-							}
+				$latest_release = $releases[0];
+				
+				// Look for the plugin ZIP asset
+				$zip_url = false;
+				if ( ! empty( $latest_release->assets ) && is_array( $latest_release->assets ) ) {
+					foreach ( $latest_release->assets as $asset ) {
+						if ( isset( $asset->name ) && strpos( $asset->name, '.zip' ) !== false ) {
+							// Use browser_download_url for all cases (works for both public and private repos)
+							// The http_request_args filter will add authentication if needed
+							$zip_url = $asset->browser_download_url;
+							break;
 						}
 					}
-					
-					// If we found a ZIP asset, use it; otherwise fall back to zipball
-					$data = new stdClass();
-					$data->tag_name = $latest_release->tag_name;
-					$data->html_url = $latest_release->html_url;
-					$data->zipball_url = $zip_url ? $zip_url : "https://github.com/{$this->username}/{$this->repository}/archive/refs/tags/{$latest_release->tag_name}.zip";
 				}
+				
+				// If we found a ZIP asset, use it; otherwise fall back to zipball
+				$data = new stdClass();
+				$data->tag_name = $latest_release->tag_name;
+				$data->html_url = $latest_release->html_url;
+				$data->zipball_url = $zip_url ? $zip_url : "https://github.com/{$this->username}/{$this->repository}/archive/refs/tags/{$latest_release->tag_name}.zip";
 			}
 		}
 
