@@ -204,6 +204,17 @@ class AQM_GHL_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th scope="row"><label for="aqm-ghl-github-token"><?php esc_html_e( 'GitHub Token (Optional)', 'aqm-ghl' ); ?></label></th>
+						<td>
+							<input name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[github_token]" id="aqm-ghl-github-token" type="password" value="" placeholder="••••••••" class="regular-text" autocomplete="new-password" />
+							<p class="description">
+								<?php esc_html_e( 'GitHub Personal Access Token for private repository updates. Leave blank to keep current token. Required if repository is private. Create token at: ', 'aqm-ghl' ); ?>
+								<a href="https://github.com/settings/tokens" target="_blank">https://github.com/settings/tokens</a>
+								<?php esc_html_e( ' (needs "repo" scope)', 'aqm-ghl' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
 						<th scope="row"><label for="aqm-ghl-logging"><?php esc_html_e( 'Enable logging', 'aqm-ghl' ); ?></label></th>
 						<td>
 							<label>
@@ -230,12 +241,12 @@ class AQM_GHL_Admin {
 				<p class="description">
 					<?php
 					$current_version = AQM_GHL_CONNECTOR_VERSION;
-					$github_token_set = defined( 'AQM_GHL_GITHUB_TOKEN' ) && ! empty( AQM_GHL_GITHUB_TOKEN );
+					$github_token_set = ! empty( $settings['github_token'] ) || ( defined( 'AQM_GHL_GITHUB_TOKEN' ) && ! empty( AQM_GHL_GITHUB_TOKEN ) );
 					printf(
 						/* translators: 1: current version, 2: token status */
 						esc_html__( 'Current version: %1$s | GitHub token: %2$s', 'aqm-ghl' ),
 						esc_html( $current_version ),
-						$github_token_set ? '<span style="color: green;">✓ Configured</span>' : '<span style="color: red;">✗ Not configured (required for private repos)</span>'
+						$github_token_set ? '<span style="color: green;">✓ Configured</span>' : '<span style="color: orange;">⚠ Not configured (required if repository is private)</span>'
 					);
 					?>
 				</p>
@@ -289,6 +300,13 @@ class AQM_GHL_Admin {
 			$sanitized['private_token'] = isset( $existing['private_token'] ) ? $existing['private_token'] : '';
 		} else {
 			$sanitized['private_token'] = sanitize_text_field( $token );
+		}
+
+		$github_token = isset( $input['github_token'] ) ? trim( wp_unslash( $input['github_token'] ) ) : '';
+		if ( '' === $github_token ) {
+			$sanitized['github_token'] = isset( $existing['github_token'] ) ? $existing['github_token'] : '';
+		} else {
+			$sanitized['github_token'] = sanitize_text_field( $github_token );
 		}
 
 		// Handle form_ids - can be array or empty

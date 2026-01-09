@@ -14,6 +14,7 @@ if ( ! function_exists( 'aqm_ghl_get_settings' ) ) {
 		$defaults = array(
 			'location_id'    => '',
 			'private_token'  => '',
+			'github_token'   => '',
 			'form_ids'       => array(),
 			'mapping'        => array(), // per form: [form_id] => [email, phone, first_name, last_name]
 			'custom_fields'  => array(), // per form: [form_id] => [ [ghl_field_id, form_field_id], ... ]

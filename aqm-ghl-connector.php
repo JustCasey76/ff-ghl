@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AQM_GHL_CONNECTOR_VERSION', '1.3.7' );
+define( 'AQM_GHL_CONNECTOR_VERSION', '1.3.8' );
 define( 'AQM_GHL_CONNECTOR_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AQM_GHL_CONNECTOR_URL', plugin_dir_url( __FILE__ ) );
 define( 'AQM_GHL_OPTION_KEY', 'aqm_ghl_connector_settings' );
@@ -38,8 +38,15 @@ function aqm_ghl_connector_init() {
 	new AQM_GHL_Handler();
 	
 	// Initialize GitHub updater
-	// For private repos, you can optionally add a GitHub token via filter or constant
-	$github_token = defined( 'AQM_GHL_GITHUB_TOKEN' ) ? AQM_GHL_GITHUB_TOKEN : '';
+	// Get GitHub token from settings (database) or wp-config.php constant
+	$settings = aqm_ghl_get_settings();
+	$github_token = ! empty( $settings['github_token'] ) ? $settings['github_token'] : '';
+	
+	// Fallback to constant if not set in settings (backwards compatibility)
+	if ( empty( $github_token ) && defined( 'AQM_GHL_GITHUB_TOKEN' ) ) {
+		$github_token = AQM_GHL_GITHUB_TOKEN;
+	}
+	
 	new AQM_GHL_Updater(
 		__FILE__,
 		'JustCasey76',
