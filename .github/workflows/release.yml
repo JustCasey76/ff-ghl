@@ -6,6 +6,13 @@ on:
       - main
     paths:
       - 'aqm-ghl-connector.php'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (leave empty to use version from plugin file)'
+        required: false
+        type: string
 
 jobs:
   release:
