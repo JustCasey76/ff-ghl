@@ -54,6 +54,13 @@ class AQM_GHL_Updater {
 	private $plugin_basename;
 
 	/**
+	 * Plugin slug (directory name)
+	 *
+	 * @var string
+	 */
+	private $plugin_slug;
+
+	/**
 	 * Initialize the updater
 	 *
 	 * @param string $file Plugin file path
@@ -74,6 +81,7 @@ class AQM_GHL_Updater {
 		}
 		$this->plugin_data = get_plugin_data( $this->file );
 		$this->plugin_basename = plugin_basename( $this->file );
+		$this->plugin_slug = dirname( $this->plugin_basename );
 
 		// Add filters and actions
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_updates' ) );
@@ -173,7 +181,7 @@ class AQM_GHL_Updater {
 		if ( $comparison_result ) {
 			// Create the plugin info object
 			$plugin_info = new stdClass();
-			$plugin_info->slug = $this->repository;
+			$plugin_info->slug = $this->plugin_slug;
 			$plugin_info->plugin = $this->plugin_basename;
 			$plugin_info->new_version = ltrim( $update_data->tag_name, 'v' );
 			$plugin_info->url = $update_data->html_url;
@@ -351,7 +359,7 @@ class AQM_GHL_Updater {
 	 */
 	public function plugin_info( $result, $action, $args ) {
 		// Check if this is the right plugin
-		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $this->repository ) {
+		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $this->plugin_slug ) {
 			return $result;
 		}
 
@@ -365,7 +373,7 @@ class AQM_GHL_Updater {
 		// Create the plugin info object
 		$plugin_info = new stdClass();
 		$plugin_info->name = $this->plugin_data['Name'];
-		$plugin_info->slug = $this->repository;
+		$plugin_info->slug = $this->plugin_slug;
 		$plugin_info->version = ltrim( $update_data->tag_name, 'v' );
 		$plugin_info->author = $this->plugin_data['Author'];
 		$plugin_info->homepage = $this->plugin_data['PluginURI'];
