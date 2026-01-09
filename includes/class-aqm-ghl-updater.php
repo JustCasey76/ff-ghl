@@ -173,7 +173,7 @@ class AQM_GHL_Updater {
 		if ( $comparison_result ) {
 			// Create the plugin info object
 			$plugin_info = new stdClass();
-			$plugin_info->slug = dirname( $this->plugin_basename ); // Use directory name as slug
+			$plugin_info->slug = $this->repository;
 			$plugin_info->plugin = $this->plugin_basename;
 			$plugin_info->new_version = ltrim( $update_data->tag_name, 'v' );
 			$plugin_info->url = $update_data->html_url;
@@ -361,9 +361,7 @@ class AQM_GHL_Updater {
 	 */
 	public function plugin_info( $result, $action, $args ) {
 		// Check if this is the right plugin
-		// WordPress uses the plugin directory name as the slug, not the repository name
-		$plugin_slug = dirname( $this->plugin_basename );
-		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $plugin_slug ) {
+		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $this->repository ) {
 			return $result;
 		}
 
