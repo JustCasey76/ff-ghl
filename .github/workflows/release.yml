@@ -1,32 +1,28 @@
-name: Create Release
+name: Create Release on Push
 
 on:
   push:
     branches:
       - main
-    paths:
-      - 'aqm-ghl-connector.php'
-      - '.github/workflows/release.yml'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (leave empty to use version from plugin file)'
-        required: false
-        type: string
+    tags:
+      - 'v*'  # Trigger on version tags
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   release:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip release]')"
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
-      - name: Extract version
-        id: version
+      - name: Extract version from plugin file
+        id: extract_version
         run: |
           VERSION=$(grep -oP "Version:\s*\K[\d.]+" aqm-ghl-connector.php | head -1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -35,7 +31,7 @@ jobs:
       - name: Check if tag exists
         id: check_tag
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
+          TAG="v${{ steps.extract_version.outputs.version }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Tag $TAG already exists"
@@ -44,46 +40,130 @@ jobs:
             echo "Tag $TAG does not exist"
           fi
       
-      - name: Create tag (if it doesn't exist)
+      - name: Check if release exists with zip asset
+        id: check_release
+        run: |
+          TAG="v${{ steps.extract_version.outputs.version }}"
+          RELEASE_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+          RELEASE_ID=$(echo "$RELEASE_RESPONSE" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+          
+          if [ -z "$RELEASE_ID" ]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release for tag $TAG does not exist"
+            exit 0
+          fi
+          
+          # Check if release has assets with a zip file
+          ASSETS=$(echo "$RELEASE_RESPONSE" | grep -o '"assets":\[.*\]' || echo "")
+          if [ -z "$ASSETS" ] || [ "$ASSETS" = '"assets":[]' ]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release exists but has no assets - will add zip"
+            exit 0
+          fi
+          
+          # Check if there's a zip file in assets
+          HAS_ZIP=$(echo "$RELEASE_RESPONSE" | grep -o '"name":"[^"]*\.zip"' | head -1)
+          if [ -n "$HAS_ZIP" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release for tag $TAG already exists with zip asset"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release exists but no zip asset found - will add zip"
+          fi
+      
+      - name: Create Git tag
         if: steps.check_tag.outputs.exists == 'false'
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
+          TAG="v${{ steps.extract_version.outputs.version }}"
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git tag -a "$TAG" -m "Version ${{ steps.version.outputs.version }}"
+          git tag -a "$TAG" -m "Version ${{ steps.extract_version.outputs.version }}: Automated release"
           git push origin "$TAG"
       
-      - name: Create plugin ZIP
+      - name: Create plugin zip file
+        if: steps.check_release.outputs.exists == 'false'
         run: |
           PLUGIN_NAME="aqm-ghl-connector"
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.extract_version.outputs.version }}"
           ZIP_NAME="${PLUGIN_NAME}-${VERSION}.zip"
           
-          # Create zip with proper structure (forward slashes)
+          # Create a clean plugin directory with proper WordPress structure
           mkdir -p "${PLUGIN_NAME}"
-          cp -r assets includes "${PLUGIN_NAME}/" 2>/dev/null || true
-          cp aqm-ghl-connector.php "${PLUGIN_NAME}/"
           
-          # Create zip file
-          zip -r "${ZIP_NAME}" "${PLUGIN_NAME}" -x "*.git*" "*.DS_Store" "scripts/*" "FTP-Deploy/*" "*.zip"
+          # Copy ONLY plugin files
+          if [ -d "assets" ]; then
+            cp -r assets "${PLUGIN_NAME}/"
+          fi
+          if [ -d "includes" ]; then
+            cp -r includes "${PLUGIN_NAME}/"
+          fi
+          if [ -f "aqm-ghl-connector.php" ]; then
+            cp aqm-ghl-connector.php "${PLUGIN_NAME}/"
+          fi
           
-          # Cleanup
-          rm -rf "${PLUGIN_NAME}"
+          # Explicitly remove any deployment files that might have been copied
+          find "${PLUGIN_NAME}" -type f \( -name "*.zip" -o -name "*.ps1" -o -name "*.bat" -o -name "*.md" -o -name "create-release.ps1" -o -name "README-RELEASES.md" -o -name ".gitignore" \) -delete
+          find "${PLUGIN_NAME}" -type d \( -name ".git" -o -name ".github" -o -name "scripts" -o -name "FTP-Deploy" \) -exec rm -rf {} + 2>/dev/null || true
+          
+          # Create zip file from plugin directory (keeps aqm-ghl-connector folder structure)
+          zip -r "${ZIP_NAME}" "${PLUGIN_NAME}" \
+            -x "*.zip" \
+            -x "*.ps1" \
+            -x "*.bat" \
+            -x "*.md" \
+            -x ".git*" \
+            -x ".github/*" \
+            -x "scripts/*" \
+            -x "FTP-Deploy/*"
+          
+          # Verify zip contents - should show aqm-ghl-connector/ folder at root
+          echo "Contents of zip file:"
+          unzip -l "${ZIP_NAME}" | head -30
           
           echo "ZIP_FILE=${ZIP_NAME}" >> $GITHUB_ENV
       
+      - name: Delete existing release if no zip asset
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          TAG="v${{ steps.extract_version.outputs.version }}"
+          RELEASE_RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+          RELEASE_ID=$(echo "$RELEASE_RESPONSE" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Deleting existing release without zip asset (ID: $RELEASE_ID)"
+            curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+          fi
+      
+      - name: Verify zip file exists
+        if: steps.check_release.outputs.exists == 'false'
+        run: |
+          ZIP_FILE="aqm-ghl-connector-${{ steps.extract_version.outputs.version }}.zip"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE file not found!"
+            exit 1
+          fi
+          echo "Zip file exists:"
+          ls -lh "$ZIP_FILE"
+      
       - name: Create GitHub Release
+        if: steps.check_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Version ${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.extract_version.outputs.version }}
+          name: Version ${{ steps.extract_version.outputs.version }}
           body: |
-            ## Version ${{ steps.version.outputs.version }}
+            ## Version ${{ steps.extract_version.outputs.version }}
             
-            See commit messages for details.
-          files: ${{ env.ZIP_FILE }}
+            Automated release created from commit: ${{ github.sha }}
+            
+            ### Changes
+            - See commit message for details
+            
+            ### Installation
+            Download the latest release and install via WordPress admin or upload via FTP.
+          files: |
+            aqm-ghl-connector-${{ steps.extract_version.outputs.version }}.zip
           draft: false
           prerelease: false
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
