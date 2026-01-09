@@ -181,7 +181,7 @@ class AQM_GHL_Updater {
 		if ( $comparison_result ) {
 			// Create the plugin info object
 			$plugin_info = new stdClass();
-			$plugin_info->slug = $this->plugin_slug;
+			$plugin_info->slug = $this->repository;
 			$plugin_info->plugin = $this->plugin_basename;
 			$plugin_info->new_version = ltrim( $update_data->tag_name, 'v' );
 			$plugin_info->url = $update_data->html_url;
@@ -359,7 +359,7 @@ class AQM_GHL_Updater {
 	 */
 	public function plugin_info( $result, $action, $args ) {
 		// Check if this is the right plugin
-		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $this->plugin_slug ) {
+		if ( $action !== 'plugin_information' || ! isset( $args->slug ) || $args->slug !== $this->repository ) {
 			return $result;
 		}
 
@@ -373,7 +373,7 @@ class AQM_GHL_Updater {
 		// Create the plugin info object
 		$plugin_info = new stdClass();
 		$plugin_info->name = $this->plugin_data['Name'];
-		$plugin_info->slug = $this->plugin_slug;
+		$plugin_info->slug = $this->repository;
 		$plugin_info->version = ltrim( $update_data->tag_name, 'v' );
 		$plugin_info->author = $this->plugin_data['Author'];
 		$plugin_info->homepage = $this->plugin_data['PluginURI'];
