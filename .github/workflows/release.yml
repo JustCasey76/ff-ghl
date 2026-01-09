@@ -37,7 +37,7 @@ jobs:
             echo "Tag $TAG does not exist"
           fi
       
-      - name: Create tag
+      - name: Create tag (if it doesn't exist)
         if: steps.check_tag.outputs.exists == 'false'
         run: |
           TAG="v${{ steps.version.outputs.version }}"
