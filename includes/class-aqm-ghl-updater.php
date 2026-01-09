@@ -275,14 +275,9 @@ class AQM_GHL_Updater {
 					if ( ! empty( $latest_release->assets ) && is_array( $latest_release->assets ) ) {
 						foreach ( $latest_release->assets as $asset ) {
 							if ( isset( $asset->name ) && strpos( $asset->name, '.zip' ) !== false ) {
-								// For authenticated downloads, use API asset endpoint instead of browser_download_url
-								if ( ! empty( $this->access_token ) && isset( $asset->id ) ) {
-									// Use API asset endpoint - requires Accept: application/octet-stream header
-									$zip_url = "https://api.github.com/repos/{$this->username}/{$this->repository}/releases/assets/{$asset->id}";
-								} else {
-									// For public repos or when no token, use browser_download_url
-									$zip_url = $asset->browser_download_url;
-								}
+								// Use browser_download_url for all cases (works for both public and private repos)
+								// The http_request_args filter will add authentication if needed
+								$zip_url = $asset->browser_download_url;
 								break;
 							}
 						}
