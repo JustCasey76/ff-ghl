@@ -641,6 +641,19 @@ class AQM_GHL_Admin {
 		);
 
 		// Inject test UTM parameters and GCLID using provisioned field IDs
+		$provisioner = new AQM_GHL_Custom_Field_Provisioner();
+		$field_mapping = $provisioner->get_field_mapping( $location['location_id'], $location['private_token'], true );
+		
+		// Log field mapping for debugging
+		aqm_ghl_log(
+			'Test contact: Field mapping retrieved.',
+			array(
+				'location_id' => $location['location_id'],
+				'field_mapping' => $field_mapping,
+				'mapping_count' => count( $field_mapping ),
+			)
+		);
+		
 		$payload = $this->inject_test_utm_data( $payload, $location['location_id'], $location['private_token'] );
 
 		$payload = aqm_ghl_clean_payload( $payload );
@@ -706,14 +719,21 @@ class AQM_GHL_Admin {
 			)
 		);
 
-		wp_send_json_success(
-			array(
-				'message' => __( 'Test contact sent successfully. Check GoHighLevel contacts.', 'aqm-ghl' ),
-				'status'  => $code,
-				'payload' => $payload,
-				'response_body' => $body,
-			)
+		// Include field mapping info in response for debugging
+		$response_data = array(
+			'message' => __( 'Test contact sent successfully. Check GoHighLevel contacts.', 'aqm-ghl' ),
+			'status'  => $code,
+			'payload' => $payload,
+			'response_body' => $body,
 		);
+		
+		// Add field mapping info if available
+		if ( isset( $field_mapping ) ) {
+			$response_data['field_mapping'] = $field_mapping;
+			$response_data['field_mapping_count'] = count( $field_mapping );
+		}
+		
+		wp_send_json_success( $response_data );
 	}
 
 	/**

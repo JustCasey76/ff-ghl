@@ -189,15 +189,63 @@ class AQM_GHL_Custom_Field_Provisioner {
 		$data = json_decode( $body, true );
 
 		if ( ! is_array( $data ) ) {
+			aqm_ghl_log(
+				'Custom field provisioner: Invalid JSON response from GHL API.',
+				array(
+					'location_id' => $location_id,
+					'response_body' => $body,
+				)
+			);
 			return new WP_Error( 'ghl_api_invalid_response', 'Invalid JSON response from GHL API.' );
 		}
 
-		// GHL API may return fields in a 'customFields' key or directly as array
+		// GHL API may return fields in different structures
+		// Try 'customFields' key first
 		if ( isset( $data['customFields'] ) && is_array( $data['customFields'] ) ) {
+			aqm_ghl_log(
+				'Custom field provisioner: Found fields in customFields key.',
+				array(
+					'location_id' => $location_id,
+					'field_count' => count( $data['customFields'] ),
+				)
+			);
 			return $data['customFields'];
 		}
+		
+		// Try 'fields' key
+		if ( isset( $data['fields'] ) && is_array( $data['fields'] ) ) {
+			aqm_ghl_log(
+				'Custom field provisioner: Found fields in fields key.',
+				array(
+					'location_id' => $location_id,
+					'field_count' => count( $data['fields'] ),
+				)
+			);
+			return $data['fields'];
+		}
+		
+		// If data is directly an array, return it
+		if ( is_array( $data ) ) {
+			aqm_ghl_log(
+				'Custom field provisioner: Using data as direct array.',
+				array(
+					'location_id' => $location_id,
+					'field_count' => count( $data ),
+					'data_keys' => array_keys( $data ),
+				)
+			);
+			return $data;
+		}
 
-		return is_array( $data ) ? $data : array();
+		aqm_ghl_log(
+			'Custom field provisioner: No fields found in response.',
+			array(
+				'location_id' => $location_id,
+				'response_data' => $data,
+			)
+		);
+		
+		return array();
 	}
 
 	/**
