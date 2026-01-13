@@ -126,16 +126,36 @@ class AQM_GHL_Custom_Field_Provisioner {
 		// Create missing fields
 		foreach ( $this->required_fields as $param_key => $required ) {
 			if ( ! isset( $mapping[ $param_key ] ) ) {
+				aqm_ghl_log(
+					'Custom field provisioner: Attempting to create missing field.',
+					array(
+						'location_id' => $location_id,
+						'param_key'   => $param_key,
+						'field_name'  => $required['name'],
+					)
+				);
+				
 				$field_id = $this->create_custom_field( $location_id, $token, $required );
+				
 				if ( ! is_wp_error( $field_id ) && ! empty( $field_id ) ) {
 					$mapping[ $param_key ] = $field_id;
+					aqm_ghl_log(
+						'Custom field provisioner: Successfully created field.',
+						array(
+							'location_id' => $location_id,
+							'param_key'   => $param_key,
+							'field_id'    => $field_id,
+						)
+					);
 				} else {
 					aqm_ghl_log(
 						'Custom field provisioner: Failed to create field.',
 						array(
 							'location_id' => $location_id,
 							'param_key'   => $param_key,
+							'field_name'  => $required['name'],
 							'error'       => is_wp_error( $field_id ) ? $field_id->get_error_message() : 'Unknown error',
+							'field_id_response' => $field_id,
 						)
 					);
 				}
@@ -295,11 +315,38 @@ class AQM_GHL_Custom_Field_Provisioner {
 		$body = wp_remote_retrieve_body( $response );
 		$data = json_decode( $body, true );
 
-		if ( ! is_array( $data ) || empty( $data['id'] ) ) {
-			return new WP_Error( 'ghl_api_invalid_response', 'Invalid response from GHL API when creating field.' );
+		// Log the response for debugging
+		aqm_ghl_log(
+			'Custom field provisioner: Create field API response.',
+			array(
+				'location_id' => $location_id,
+				'field_name'  => $field_data['name'],
+				'status_code' => $code,
+				'response_body' => $body,
+				'parsed_data' => $data,
+			)
+		);
+
+		if ( ! is_array( $data ) ) {
+			return new WP_Error( 'ghl_api_invalid_response', 'Invalid JSON response from GHL API when creating field: ' . substr( $body, 0, 200 ) );
 		}
 
-		return $data['id'];
+		// Check for field ID in various possible response structures
+		if ( ! empty( $data['id'] ) ) {
+			return $data['id'];
+		}
+		
+		// Some APIs return the field object directly
+		if ( ! empty( $data['customField'] ) && ! empty( $data['customField']['id'] ) ) {
+			return $data['customField']['id'];
+		}
+		
+		// Check if the response contains a field object
+		if ( ! empty( $data['field'] ) && ! empty( $data['field']['id'] ) ) {
+			return $data['field']['id'];
+		}
+
+		return new WP_Error( 'ghl_api_invalid_response', 'No field ID found in response. Response structure: ' . wp_json_encode( array_keys( $data ) ) );
 	}
 
 	/**
