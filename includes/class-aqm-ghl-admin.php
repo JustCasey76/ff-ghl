@@ -641,7 +641,13 @@ class AQM_GHL_Admin {
 		} else {
 			$message .= ' ' . __( 'Warning: Custom fields were not provisioned. UTM parameters were not included in the test contact.', 'aqm-ghl' );
 			if ( ! empty( $provisioning_errors ) ) {
-				$message .= ' ' . __( 'Errors:', 'aqm-ghl' ) . ' ' . implode( '; ', $provisioning_errors );
+				$error_text = implode( '; ', $provisioning_errors );
+				$message .= ' ' . __( 'Errors:', 'aqm-ghl' ) . ' ' . $error_text;
+				
+				// Check for specific 401 scope error and provide helpful guidance
+				if ( strpos( $error_text, '401' ) !== false && strpos( $error_text, 'not authorized for this scope' ) !== false ) {
+					$message .= ' ' . __( 'Your Private Integration Token does not have permission to read/create custom fields. Please generate a new token in GoHighLevel with "Custom Fields" scope/permissions enabled, or manually create the custom fields in GoHighLevel and enter their IDs in the plugin settings.', 'aqm-ghl' );
+				}
 			} else {
 				$message .= ' ' . __( 'Please use the "Refresh/Provision Custom Fields" button first, or check debug logs for details.', 'aqm-ghl' );
 			}
@@ -811,9 +817,40 @@ class AQM_GHL_Admin {
 				)
 			);
 		} else {
+			// Try to get more specific error information
+			$test_response = wp_remote_get(
+				sprintf( 'https://services.leadconnectorhq.com/locations/%s/customFields/', $settings['location_id'] ),
+				array(
+					'headers' => array(
+						'Authorization' => 'Bearer ' . $settings['private_token'],
+						'Content-Type'  => 'application/json',
+						'Version'       => '2021-07-28',
+					),
+					'timeout' => 15,
+				)
+			);
+			
+			$error_message = __( 'Failed to provision fields. Check logs for details.', 'aqm-ghl' );
+			
+			if ( ! is_wp_error( $test_response ) ) {
+				$test_code = wp_remote_retrieve_response_code( $test_response );
+				$test_body = wp_remote_retrieve_body( $test_response );
+				
+				if ( $test_code === 401 ) {
+					$error_message = __( 'Failed to provision fields: Your Private Integration Token does not have permission to read/create custom fields. Please generate a new token in GoHighLevel with "Custom Fields" scope/permissions enabled.', 'aqm-ghl' );
+				} elseif ( $test_code >= 400 ) {
+					$error_message = sprintf(
+						/* translators: 1: status code, 2: error body */
+						__( 'Failed to provision fields: API returned status %1$d: %2$s', 'aqm-ghl' ),
+						$test_code,
+						substr( $test_body, 0, 200 )
+					);
+				}
+			}
+			
 			wp_send_json_error(
 				array(
-					'message' => __( 'Failed to provision fields. Check logs for details.', 'aqm-ghl' ),
+					'message' => $error_message,
 				),
 				500
 			);
