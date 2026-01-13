@@ -486,6 +486,24 @@ class AQM_GHL_Admin {
 			);
 		}
 
+		// First, ensure custom fields are provisioned
+		$provisioner = new AQM_GHL_Custom_Field_Provisioner();
+		
+		// Clear cache and force provision fields
+		$provisioner->clear_cache( $settings['location_id'] );
+		$field_mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
+		
+		// Log field mapping for debugging
+		aqm_ghl_log(
+			'Test contact: Field mapping retrieved after provisioning.',
+			array(
+				'location_id' => $settings['location_id'],
+				'field_mapping' => $field_mapping,
+				'mapping_count' => count( $field_mapping ),
+			)
+		);
+		
+		// Build initial payload
 		$payload = array(
 			'locationId' => $settings['location_id'],
 			'email'      => 'john.doe+ghl-test@example.com',
@@ -502,19 +520,6 @@ class AQM_GHL_Admin {
 		);
 
 		// Inject test UTM parameters and GCLID using provisioned field IDs
-		$provisioner = new AQM_GHL_Custom_Field_Provisioner();
-		$field_mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
-		
-		// Log field mapping for debugging
-		aqm_ghl_log(
-			'Test contact: Field mapping retrieved.',
-			array(
-				'location_id' => $settings['location_id'],
-				'field_mapping' => $field_mapping,
-				'mapping_count' => count( $field_mapping ),
-			)
-		);
-		
 		$payload = $this->inject_test_utm_data( $payload, $settings['location_id'], $settings['private_token'] );
 
 		$payload = aqm_ghl_clean_payload( $payload );
@@ -581,8 +586,27 @@ class AQM_GHL_Admin {
 		);
 
 		// Include field mapping info in response for debugging
+		$message = __( 'Test contact sent successfully. Check GoHighLevel contacts.', 'aqm-ghl' );
+		
+		// Add provisioning status to message
+		if ( ! empty( $field_mapping ) && count( $field_mapping ) >= 6 ) {
+			$message .= ' ' . sprintf(
+				/* translators: %d: number of fields */
+				__( 'All %d UTM/GCLID custom fields were provisioned and included in the test contact.', 'aqm-ghl' ),
+				count( $field_mapping )
+			);
+		} elseif ( ! empty( $field_mapping ) ) {
+			$message .= ' ' . sprintf(
+				/* translators: %d: number of fields */
+				__( 'Warning: Only %d of 6 expected custom fields were provisioned. Some UTM parameters may be missing.', 'aqm-ghl' ),
+				count( $field_mapping )
+			);
+		} else {
+			$message .= ' ' . __( 'Warning: Custom fields were not provisioned. UTM parameters were not included in the test contact. Please use the "Refresh/Provision Custom Fields" button first.', 'aqm-ghl' );
+		}
+		
 		$response_data = array(
-			'message' => __( 'Test contact sent successfully. Check GoHighLevel contacts.', 'aqm-ghl' ),
+			'message' => $message,
 			'status'  => $code,
 			'payload' => $payload,
 			'response_body' => $body,
