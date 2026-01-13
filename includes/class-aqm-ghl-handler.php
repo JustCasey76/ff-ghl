@@ -39,17 +39,16 @@ class AQM_GHL_Handler {
 	 * @param int $form_id  Form ID.
 	 */
 	public function maybe_send_to_ghl( $entry_id, $form_id ) {
-		// Get location configuration for this form
-		$location = aqm_ghl_get_location_for_form( $form_id );
+		$settings = aqm_ghl_get_settings();
 
-		if ( ! $location || empty( $location['location_id'] ) || empty( $location['private_token'] ) ) {
-			aqm_ghl_log( 'Missing location configuration for form.', array( 'form_id' => $form_id ) );
+		$form_ids = ! empty( $settings['form_ids'] ) && is_array( $settings['form_ids'] ) ? array_map( 'absint', $settings['form_ids'] ) : array();
+
+		if ( empty( $form_ids ) || ! in_array( (int) $form_id, $form_ids, true ) ) {
 			return;
 		}
 
-		// Check if this form is mapped to this location
-		$form_ids = ! empty( $location['form_ids'] ) && is_array( $location['form_ids'] ) ? array_map( 'absint', $location['form_ids'] ) : array();
-		if ( ! empty( $form_ids ) && ! in_array( (int) $form_id, $form_ids, true ) ) {
+		if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) ) {
+			aqm_ghl_log( 'Missing configuration. Aborting send.' );
 			return;
 		}
 
@@ -81,23 +80,19 @@ class AQM_GHL_Handler {
 			return;
 		}
 
-		$settings = aqm_ghl_get_settings(); // Get full settings for mapping/custom fields
-
 		$payload = array(
-			'locationId' => $location['location_id'],
+			'locationId' => $settings['location_id'],
 			'email'      => is_array( $email ) ? reset( $email ) : $email,
 			'phone'      => $phone,
 			'firstName'  => is_array( $first_name ) ? reset( $first_name ) : $first_name,
 			'lastName'   => is_array( $last_name ) ? reset( $last_name ) : $last_name,
 		);
 
-		// Use location-specific tags if available
-		$tags_string = ! empty( $location['tags'] ) ? $location['tags'] : ( ! empty( $settings['tags'] ) ? $settings['tags'] : '' );
-		if ( ! empty( $tags_string ) ) {
+		if ( ! empty( $settings['tags'] ) ) {
 			$tags = array_filter(
 				array_map(
 					'trim',
-					explode( ',', $tags_string )
+					explode( ',', $settings['tags'] )
 				)
 			);
 			if ( ! empty( $tags ) ) {
@@ -111,11 +106,11 @@ class AQM_GHL_Handler {
 		}
 
 		// Inject UTM parameters and GCLID using provisioned field IDs
-		$payload = $this->inject_utm_data( $payload, $location['location_id'], $location['private_token'] );
+		$payload = $this->inject_utm_data( $payload, $settings['location_id'], $settings['private_token'] );
 
 		$payload = aqm_ghl_clean_payload( $payload );
 
-		$response = aqm_ghl_send_contact_payload( $payload, $location['private_token'] );
+		$response = aqm_ghl_send_contact_payload( $payload, $settings['private_token'] );
 
 		if ( is_wp_error( $response ) ) {
 			aqm_ghl_log(

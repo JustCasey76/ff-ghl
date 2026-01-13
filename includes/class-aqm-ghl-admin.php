@@ -137,14 +137,9 @@ class AQM_GHL_Admin {
 					<p><?php esc_html_e( 'Formidable Forms is not active. Install and activate it to configure this integration.', 'aqm-ghl' ); ?></p>
 				</div>
 			<?php endif; ?>
-			<?php
-			$locations = ! empty( $settings['locations'] ) && is_array( $settings['locations'] ) ? $settings['locations'] : array();
-			$has_locations = ! empty( $locations );
-			$has_legacy = ! empty( $settings['location_id'] ) && ! empty( $settings['private_token'] );
-			
-			if ( ! $has_locations && ! $has_legacy ) : ?>
+			<?php if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) || empty( $settings['form_ids'] ) ) : ?>
 				<div class="notice notice-warning">
-					<p><?php esc_html_e( 'Configuration incomplete. Add at least one GoHighLevel location and select forms.', 'aqm-ghl' ); ?></p>
+					<p><?php esc_html_e( 'Configuration incomplete. Add your GoHighLevel credentials and select at least one Formidable form.', 'aqm-ghl' ); ?></p>
 				</div>
 			<?php endif; ?>
 
@@ -152,27 +147,57 @@ class AQM_GHL_Admin {
 				<?php
 				settings_fields( 'aqm_ghl_connector' );
 				?>
-				
-				<h2><?php esc_html_e( 'GoHighLevel Locations', 'aqm-ghl' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'Configure one or more GHL locations. Each location can have different forms mapped to it.', 'aqm-ghl' ); ?></p>
-				
-				<div id="aqm-ghl-locations-container">
-					<?php if ( ! empty( $locations ) ) : ?>
-						<?php foreach ( $locations as $index => $location ) : ?>
-							<?php $this->render_location_fields( $index, $location, $forms ); ?>
-						<?php endforeach; ?>
-					<?php else : ?>
-						<?php $this->render_location_fields( 0, array(), $forms ); ?>
-					<?php endif; ?>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row"><label for="aqm-ghl-location-id"><?php esc_html_e( 'GHL Location ID', 'aqm-ghl' ); ?></label></th>
+						<td>
+							<input name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[location_id]" id="aqm-ghl-location-id" type="text" value="<?php echo esc_attr( $settings['location_id'] ); ?>" class="regular-text" required />
+							<p class="description"><?php esc_html_e( 'Paste the GoHighLevel Location ID.', 'aqm-ghl' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label for="aqm-ghl-private-token"><?php esc_html_e( 'GHL Private Integration Token', 'aqm-ghl' ); ?></label></th>
+						<td>
+							<input name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[private_token]" id="aqm-ghl-private-token" type="password" value="" placeholder="••••••••" class="regular-text" autocomplete="new-password" />
+							<p class="description"><?php esc_html_e( 'Token is masked after save. Leave blank to keep the current token.', 'aqm-ghl' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><label><?php esc_html_e( 'Formidable Forms', 'aqm-ghl' ); ?></label></th>
+						<td>
+							<div class="aqm-ghl-form-checkboxes">
+								<?php if ( ! empty( $forms ) ) : ?>
+									<?php foreach ( $forms as $form ) : ?>
+										<?php $is_checked = in_array( (int) $form->id, isset( $settings['form_ids'] ) ? (array) $settings['form_ids'] : array(), true ); ?>
+										<label class="aqm-ghl-form-checkbox-item">
+											<input 
+												type="checkbox" 
+												name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[form_ids][]" 
+												value="<?php echo esc_attr( $form->id ); ?>" 
+												class="aqm-ghl-form-checkbox"
+												data-form-id="<?php echo esc_attr( $form->id ); ?>"
+												<?php checked( $is_checked ); ?>
+											/>
+											<span class="aqm-ghl-form-checkbox-label"><?php echo esc_html( $form->name ); ?></span>
+										</label>
+									<?php endforeach; ?>
+								<?php else : ?>
+									<p class="description"><?php esc_html_e( 'No forms found. Please create a form in Formidable Forms first.', 'aqm-ghl' ); ?></p>
+								<?php endif; ?>
+							</div>
+							<p class="description"><?php esc_html_e( 'Select one or more forms to send to GoHighLevel.', 'aqm-ghl' ); ?></p>
+						</td>
+					</tr>
+				</table>
+
+				<h2><?php esc_html_e( 'Field Mapping', 'aqm-ghl' ); ?></h2>
+				<div id="aqm-ghl-form-mapping-containers">
+					<!-- Per-form mapping containers injected by JS -->
 				</div>
-				
-				<p>
-					<button type="button" class="button button-secondary" id="aqm-ghl-add-location"><?php esc_html_e( '+ Add Location', 'aqm-ghl' ); ?></button>
-				</p>
-				
+
 				<h2><?php esc_html_e( 'Custom Field Provisioning', 'aqm-ghl' ); ?></h2>
 				<p class="description">
-					<?php esc_html_e( 'The plugin automatically creates required custom fields (UTM parameters, GCLID) in each location. Use this button to manually refresh/provision fields for all locations.', 'aqm-ghl' ); ?>
+					<?php esc_html_e( 'The plugin automatically creates required custom fields (UTM parameters, GCLID) in your location. Use this button to manually refresh/provision fields.', 'aqm-ghl' ); ?>
 				</p>
 				<p>
 					<button type="button" class="button button-secondary" id="aqm-ghl-provision-fields"><?php esc_html_e( 'Refresh/Provision Custom Fields', 'aqm-ghl' ); ?></button>
@@ -274,107 +299,6 @@ class AQM_GHL_Admin {
 	}
 
 	/**
-	 * Render location fields for a single location.
-	 *
-	 * @param int   $index    Location index.
-	 * @param array $location Location data.
-	 * @param array $forms    Available forms.
-	 */
-	private function render_location_fields( $index, $location, $forms ) {
-		$name         = isset( $location['name'] ) ? $location['name'] : '';
-		$location_id  = isset( $location['location_id'] ) ? $location['location_id'] : '';
-		$private_token = isset( $location['private_token'] ) ? $location['private_token'] : '';
-		$form_ids     = isset( $location['form_ids'] ) && is_array( $location['form_ids'] ) ? $location['form_ids'] : array();
-		$tags         = isset( $location['tags'] ) ? $location['tags'] : '';
-		?>
-		<div class="aqm-ghl-location-block" data-location-index="<?php echo esc_attr( $index ); ?>" style="border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; background: #f9f9f9;">
-			<h3 style="margin-top: 0;">
-				<?php esc_html_e( 'Location', 'aqm-ghl' ); ?> #<?php echo esc_html( $index + 1 ); ?>
-				<button type="button" class="button button-small aqm-ghl-remove-location" style="float: right; color: #dc3232;"><?php esc_html_e( 'Remove', 'aqm-ghl' ); ?></button>
-			</h3>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row"><label><?php esc_html_e( 'Location Name', 'aqm-ghl' ); ?></label></th>
-					<td>
-						<input 
-							type="text" 
-							name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[locations][<?php echo esc_attr( $index ); ?>][name]" 
-							value="<?php echo esc_attr( $name ); ?>" 
-							class="regular-text" 
-							placeholder="<?php esc_attr_e( 'e.g., Client A', 'aqm-ghl' ); ?>"
-						/>
-						<p class="description"><?php esc_html_e( 'A friendly name for this location (for your reference).', 'aqm-ghl' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label><?php esc_html_e( 'GHL Location ID', 'aqm-ghl' ); ?></label></th>
-					<td>
-						<input 
-							type="text" 
-							name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[locations][<?php echo esc_attr( $index ); ?>][location_id]" 
-							value="<?php echo esc_attr( $location_id ); ?>" 
-							class="regular-text" 
-							required
-						/>
-						<p class="description"><?php esc_html_e( 'Paste the GoHighLevel Location ID.', 'aqm-ghl' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label><?php esc_html_e( 'GHL Private Integration Token', 'aqm-ghl' ); ?></label></th>
-					<td>
-						<input 
-							type="password" 
-							name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[locations][<?php echo esc_attr( $index ); ?>][private_token]" 
-							value="" 
-							placeholder="<?php echo ! empty( $private_token ) ? '••••••••' : ''; ?>" 
-							class="regular-text" 
-							autocomplete="new-password"
-						/>
-						<p class="description"><?php esc_html_e( 'Token is masked after save. Leave blank to keep the current token.', 'aqm-ghl' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label><?php esc_html_e( 'Formidable Forms', 'aqm-ghl' ); ?></label></th>
-					<td>
-						<div class="aqm-ghl-form-checkboxes">
-							<?php if ( ! empty( $forms ) ) : ?>
-								<?php foreach ( $forms as $form ) : ?>
-									<?php $is_checked = in_array( (int) $form->id, $form_ids, true ); ?>
-									<label class="aqm-ghl-form-checkbox-item">
-										<input 
-											type="checkbox" 
-											name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[locations][<?php echo esc_attr( $index ); ?>][form_ids][]" 
-											value="<?php echo esc_attr( $form->id ); ?>" 
-											<?php checked( $is_checked ); ?>
-										/>
-										<span><?php echo esc_html( $form->name ); ?></span>
-									</label>
-								<?php endforeach; ?>
-							<?php else : ?>
-								<p class="description"><?php esc_html_e( 'No forms found.', 'aqm-ghl' ); ?></p>
-							<?php endif; ?>
-						</div>
-						<p class="description"><?php esc_html_e( 'Select forms that should send to this location.', 'aqm-ghl' ); ?></p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row"><label><?php esc_html_e( 'Tags', 'aqm-ghl' ); ?></label></th>
-					<td>
-						<input 
-							type="text" 
-							name="<?php echo esc_attr( AQM_GHL_OPTION_KEY ); ?>[locations][<?php echo esc_attr( $index ); ?>][tags]" 
-							value="<?php echo esc_attr( $tags ); ?>" 
-							class="regular-text"
-						/>
-						<p class="description"><?php esc_html_e( 'Comma-separated tags to apply to contacts from this location.', 'aqm-ghl' ); ?></p>
-					</td>
-				</tr>
-			</table>
-		</div>
-		<?php
-	}
-
-	/**
 	 * Sanitize settings before save.
 	 *
 	 * @param array $input Raw input.
@@ -385,48 +309,7 @@ class AQM_GHL_Admin {
 		$existing = aqm_ghl_get_settings();
 		$sanitized = array();
 
-		// Handle multi-location format
-		if ( isset( $input['locations'] ) && is_array( $input['locations'] ) ) {
-			$sanitized['locations'] = array();
-			foreach ( $input['locations'] as $index => $location ) {
-				$sanitized_location = array(
-					'name'         => isset( $location['name'] ) ? sanitize_text_field( $location['name'] ) : '',
-					'location_id'  => isset( $location['location_id'] ) ? sanitize_text_field( $location['location_id'] ) : '',
-					'form_ids'     => array(),
-					'tags'         => isset( $location['tags'] ) ? sanitize_text_field( $location['tags'] ) : '',
-				);
-
-				// Handle token (preserve if blank)
-				$token = isset( $location['private_token'] ) ? trim( wp_unslash( $location['private_token'] ) ) : '';
-				if ( '' === $token ) {
-					// Preserve existing token for this location if available
-					if ( isset( $existing['locations'][ $index ]['private_token'] ) ) {
-						$sanitized_location['private_token'] = $existing['locations'][ $index ]['private_token'];
-					} else {
-						$sanitized_location['private_token'] = '';
-					}
-				} else {
-					$sanitized_location['private_token'] = sanitize_text_field( $token );
-				}
-
-				// Handle form_ids
-				if ( isset( $location['form_ids'] ) && is_array( $location['form_ids'] ) ) {
-					foreach ( $location['form_ids'] as $fid ) {
-						$fid = absint( $fid );
-						if ( $fid ) {
-							$sanitized_location['form_ids'][] = $fid;
-						}
-					}
-				}
-
-				$sanitized['locations'][] = $sanitized_location;
-			}
-		} else {
-			// Preserve existing locations if not in input
-			$sanitized['locations'] = isset( $existing['locations'] ) ? $existing['locations'] : array();
-		}
-
-		// Legacy single-location support (for backwards compatibility)
+		// Single location configuration (simplified from multi-location)
 		$sanitized['location_id'] = isset( $input['location_id'] ) ? sanitize_text_field( $input['location_id'] ) : '';
 
 		$token = isset( $input['private_token'] ) ? trim( wp_unslash( $input['private_token'] ) ) : '';
@@ -446,7 +329,6 @@ class AQM_GHL_Admin {
 		// Handle form_ids - can be array or empty
 		$form_ids = array();
 		if ( isset( $input['form_ids'] ) ) {
-			// Handle both array and single value (in case WordPress sends it differently)
 			if ( is_array( $input['form_ids'] ) ) {
 				foreach ( $input['form_ids'] as $fid ) {
 					$fid = absint( $fid );
@@ -455,7 +337,6 @@ class AQM_GHL_Admin {
 					}
 				}
 			} elseif ( ! empty( $input['form_ids'] ) ) {
-				// Single value case
 				$fid = absint( $input['form_ids'] );
 				if ( $fid ) {
 					$form_ids[] = $fid;
@@ -469,28 +350,23 @@ class AQM_GHL_Admin {
 		$existing_custom_fields = isset( $existing['custom_fields'] ) && is_array( $existing['custom_fields'] ) ? $existing['custom_fields'] : array();
 		
 		// Process new mapping data from form submission
-		// Only update mappings for forms that are currently selected (have mapping data in POST)
 		$mapping = isset( $input['mapping'] ) && is_array( $input['mapping'] ) ? $input['mapping'] : array();
 		$sanitized['mapping'] = $existing_mapping; // Start with existing - preserve all
 		
-		// Only update mappings for forms that are in the POST data (currently visible/selected forms)
-		// But preserve mappings for forms that are NOT in POST (hidden/deselected forms)
 		if ( ! empty( $mapping ) ) {
 			foreach ( $mapping as $fid => $map_values ) {
 				$fid = absint( $fid );
 				if ( ! $fid ) {
 					continue;
 				}
-				// Only update if we have actual values - don't overwrite with empty if form block was hidden
-				// Check if this form is in the selected form_ids - if not, preserve existing mapping
+				// Only update if form is selected
 				if ( ! in_array( $fid, $form_ids, true ) ) {
-					// Form is not selected, preserve existing mapping
 					if ( isset( $existing_mapping[ $fid ] ) ) {
 						$sanitized['mapping'][ $fid ] = $existing_mapping[ $fid ];
 					}
 					continue;
 				}
-				// Update this form's mapping - allow empty values (user can clear a mapping)
+				// Update this form's mapping
 				$sanitized['mapping'][ $fid ] = array(
 					'email'      => isset( $map_values['email'] ) ? absint( $map_values['email'] ) : '',
 					'phone'      => isset( $map_values['phone'] ) ? absint( $map_values['phone'] ) : '',
@@ -500,7 +376,7 @@ class AQM_GHL_Admin {
 			}
 		}
 		
-		// Ensure all selected forms have mapping entries (even if empty) to prevent data loss
+		// Ensure all selected forms have mapping entries (even if empty)
 		foreach ( $form_ids as $fid ) {
 			if ( ! isset( $sanitized['mapping'][ $fid ] ) ) {
 				$sanitized['mapping'][ $fid ] = isset( $existing_mapping[ $fid ] ) 
@@ -513,12 +389,8 @@ class AQM_GHL_Admin {
 					);
 			}
 		}
-		
-		// Clean up mappings for forms that are no longer in form_ids (optional cleanup)
-		// But preserve them in case user wants to reselect later - so we don't do cleanup
 
 		// Process new custom fields data from form submission
-		// The input comes as per-form structure: [form_id] => [ [ghl_field_id, form_field_id], ... ]
 		$custom_fields = isset( $input['custom_fields'] ) ? $input['custom_fields'] : array();
 		$sanitized_custom_fields = $existing_custom_fields; // Start with existing
 		if ( ! empty( $custom_fields ) && is_array( $custom_fields ) ) {
@@ -546,7 +418,6 @@ class AQM_GHL_Admin {
 					if ( ! empty( $cleaned ) ) {
 						$sanitized_custom_fields[ $fid ] = $cleaned;
 					} else {
-						// If empty, remove this form's custom fields (user cleared them)
 						unset( $sanitized_custom_fields[ $fid ] );
 					}
 				}
@@ -567,6 +438,7 @@ class AQM_GHL_Admin {
 
 		return $sanitized;
 	}
+
 
 	/**
 	 * AJAX handler to fetch fields for a form.
@@ -605,28 +477,17 @@ class AQM_GHL_Admin {
 
 		$settings = aqm_ghl_get_settings();
 
-		// Try to get first location, or fall back to legacy single location
-		$location = null;
-		if ( ! empty( $settings['locations'] ) && is_array( $settings['locations'] ) && ! empty( $settings['locations'][0] ) ) {
-			$location = $settings['locations'][0];
-		} elseif ( ! empty( $settings['location_id'] ) && ! empty( $settings['private_token'] ) ) {
-			$location = array(
-				'location_id'  => $settings['location_id'],
-				'private_token' => $settings['private_token'],
-			);
-		}
-
-		if ( ! $location || empty( $location['location_id'] ) || empty( $location['private_token'] ) ) {
+		if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) ) {
 			wp_send_json_error(
 				array(
-					'message' => __( 'Add at least one location with Location ID and Private Integration Token, then save settings before testing.', 'aqm-ghl' ),
+					'message' => __( 'Add Location ID and Private Integration Token, then save settings before testing.', 'aqm-ghl' ),
 				),
 				400
 			);
 		}
 
 		$payload = array(
-			'locationId' => $location['location_id'],
+			'locationId' => $settings['location_id'],
 			'email'      => 'john.doe+ghl-test@example.com',
 			'phone'      => '+15555550123',
 			'firstName'  => 'John',
@@ -642,23 +503,23 @@ class AQM_GHL_Admin {
 
 		// Inject test UTM parameters and GCLID using provisioned field IDs
 		$provisioner = new AQM_GHL_Custom_Field_Provisioner();
-		$field_mapping = $provisioner->get_field_mapping( $location['location_id'], $location['private_token'], true );
+		$field_mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
 		
 		// Log field mapping for debugging
 		aqm_ghl_log(
 			'Test contact: Field mapping retrieved.',
 			array(
-				'location_id' => $location['location_id'],
+				'location_id' => $settings['location_id'],
 				'field_mapping' => $field_mapping,
 				'mapping_count' => count( $field_mapping ),
 			)
 		);
 		
-		$payload = $this->inject_test_utm_data( $payload, $location['location_id'], $location['private_token'] );
+		$payload = $this->inject_test_utm_data( $payload, $settings['location_id'], $settings['private_token'] );
 
 		$payload = aqm_ghl_clean_payload( $payload );
 
-		$response = aqm_ghl_send_contact_payload( $payload, $location['private_token'] );
+		$response = aqm_ghl_send_contact_payload( $payload, $settings['private_token'] );
 
 		if ( is_wp_error( $response ) ) {
 			wp_send_json_error(
@@ -851,86 +712,41 @@ class AQM_GHL_Admin {
 		}
 
 		$settings = aqm_ghl_get_settings();
-		$provisioner = new AQM_GHL_Custom_Field_Provisioner();
-		$results = array();
 
-		// Provision fields for all locations
-		if ( ! empty( $settings['locations'] ) && is_array( $settings['locations'] ) ) {
-			foreach ( $settings['locations'] as $location ) {
-				if ( empty( $location['location_id'] ) || empty( $location['private_token'] ) ) {
-					$results[] = array(
-						'location' => isset( $location['name'] ) ? $location['name'] : __( 'Unknown', 'aqm-ghl' ),
-						'success'  => false,
-						'message'  => __( 'Missing location ID or token.', 'aqm-ghl' ),
-					);
-					continue;
-				}
-
-				// Clear cache and force refresh
-				$provisioner->clear_cache( $location['location_id'] );
-				$mapping = $provisioner->get_field_mapping( $location['location_id'], $location['private_token'], true );
-
-				if ( ! empty( $mapping ) ) {
-					$results[] = array(
-						'location' => isset( $location['name'] ) ? $location['name'] : __( 'Unknown', 'aqm-ghl' ),
-						'success'  => true,
-						'message'  => sprintf(
-							/* translators: %d: number of fields */
-							__( 'Successfully provisioned %d fields.', 'aqm-ghl' ),
-							count( $mapping )
-						),
-					);
-				} else {
-					$results[] = array(
-						'location' => isset( $location['name'] ) ? $location['name'] : __( 'Unknown', 'aqm-ghl' ),
-						'success'  => false,
-						'message'  => __( 'Failed to provision fields. Check logs for details.', 'aqm-ghl' ),
-					);
-				}
-			}
-		}
-
-		// Also handle legacy single location
-		if ( ! empty( $settings['location_id'] ) && ! empty( $settings['private_token'] ) ) {
-			$provisioner->clear_cache( $settings['location_id'] );
-			$mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
-
-			if ( ! empty( $mapping ) ) {
-				$results[] = array(
-					'location' => __( 'Default Location (Legacy)', 'aqm-ghl' ),
-					'success'  => true,
-					'message'  => sprintf(
-						/* translators: %d: number of fields */
-						__( 'Successfully provisioned %d fields.', 'aqm-ghl' ),
-						count( $mapping )
-					),
-				);
-			}
-		}
-
-		if ( empty( $results ) ) {
+		if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) ) {
 			wp_send_json_error(
 				array(
-					'message' => __( 'No locations configured.', 'aqm-ghl' ),
+					'message' => __( 'Location ID and Private Integration Token must be configured first.', 'aqm-ghl' ),
 				),
 				400
 			);
 		}
 
-		$success_count = count( array_filter( $results, function( $r ) { return $r['success']; } ) );
-		$total_count = count( $results );
+		$provisioner = new AQM_GHL_Custom_Field_Provisioner();
 
-		wp_send_json_success(
-			array(
-				'message' => sprintf(
-					/* translators: 1: success count, 2: total count */
-					__( 'Provisioned fields for %1$d of %2$d locations.', 'aqm-ghl' ),
-					$success_count,
-					$total_count
+		// Clear cache and force refresh
+		$provisioner->clear_cache( $settings['location_id'] );
+		$mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
+
+		if ( ! empty( $mapping ) ) {
+			wp_send_json_success(
+				array(
+					'message' => sprintf(
+						/* translators: %d: number of fields */
+						__( 'Successfully provisioned %d custom fields.', 'aqm-ghl' ),
+						count( $mapping )
+					),
+					'field_count' => count( $mapping ),
+				)
+			);
+		} else {
+			wp_send_json_error(
+				array(
+					'message' => __( 'Failed to provision fields. Check logs for details.', 'aqm-ghl' ),
 				),
-				'results' => $results,
-			)
-		);
+				500
+			);
+		}
 	}
 }
 
