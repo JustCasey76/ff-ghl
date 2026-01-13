@@ -1,5 +1,6 @@
 <# 
 Creates FTP-Deploy folder with files changed since the last run.
+NOTE: This script is DEPRECATED. Use update-ftp-deploy.ps1 instead.
 Usage: from scripts/ folder -> .\create-ftp-deploy.ps1
 #>
 

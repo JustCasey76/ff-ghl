@@ -1,0 +1,315 @@
+<?php
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Handles provisioning and caching of GoHighLevel custom fields per location.
+ *
+ * This class ensures required UTM/GCLID custom fields exist in each GHL location
+ * and caches the field ID mappings to avoid repeated API calls.
+ */
+class AQM_GHL_Custom_Field_Provisioner {
+
+	/**
+	 * Required custom fields that must exist in each location.
+	 *
+	 * @var array
+	 */
+	private $required_fields = array(
+		'gclid'        => array(
+			'name'  => 'AQM - gclid',
+			'label' => 'GCLID',
+			'type'  => 'TEXT',
+		),
+		'utm_source'   => array(
+			'name'  => 'AQM - utm_source',
+			'label' => 'UTM Source',
+			'type'  => 'TEXT',
+		),
+		'utm_medium'   => array(
+			'name'  => 'AQM - utm_medium',
+			'label' => 'UTM Medium',
+			'type'  => 'TEXT',
+		),
+		'utm_campaign' => array(
+			'name'  => 'AQM - utm_campaign',
+			'label' => 'UTM Campaign',
+			'type'  => 'TEXT',
+		),
+		'utm_term'     => array(
+			'name'  => 'AQM - utm_term',
+			'label' => 'UTM Term',
+			'type'  => 'TEXT',
+		),
+		'utm_content'  => array(
+			'name'  => 'AQM - utm_content',
+			'label' => 'UTM Content',
+			'type'  => 'TEXT',
+		),
+	);
+
+	/**
+	 * Cache expiration time in seconds (6 hours).
+	 *
+	 * @var int
+	 */
+	private $cache_expiration = 21600;
+
+	/**
+	 * Get the field ID mapping for a location, provisioning if necessary.
+	 *
+	 * @param string $location_id GHL Location ID.
+	 * @param string $token       Private integration token.
+	 * @param bool   $force_refresh Force refresh of cache.
+	 *
+	 * @return array Mapping of param_key => field_id (e.g., ['gclid' => 'custom_abc123', ...]).
+	 */
+	public function get_field_mapping( $location_id, $token, $force_refresh = false ) {
+		if ( empty( $location_id ) || empty( $token ) ) {
+			aqm_ghl_log( 'Custom field provisioner: Missing location_id or token.', array( 'location_id' => $location_id ) );
+			return array();
+		}
+
+		$cache_key = $this->get_cache_key( $location_id );
+		$transient_key = $this->get_transient_key( $location_id );
+
+		// Check transient first (throttling)
+		if ( ! $force_refresh ) {
+			$transient = get_transient( $transient_key );
+			if ( false !== $transient ) {
+				// Transient exists, use cached mapping from options
+				$mapping = get_option( $cache_key, array() );
+				if ( ! empty( $mapping ) && is_array( $mapping ) ) {
+					return $mapping;
+				}
+			}
+		}
+
+		// Need to refresh - get current fields from API
+		$existing_fields = $this->fetch_custom_fields( $location_id, $token );
+
+		if ( is_wp_error( $existing_fields ) ) {
+			aqm_ghl_log(
+				'Custom field provisioner: Failed to fetch existing fields.',
+				array(
+					'location_id' => $location_id,
+					'error'       => $existing_fields->get_error_message(),
+				)
+			);
+			// Return cached mapping if available, even if expired
+			$cached = get_option( $cache_key, array() );
+			return is_array( $cached ) ? $cached : array();
+		}
+
+		$mapping = array();
+
+		// Build mapping from existing fields
+		foreach ( $existing_fields as $field ) {
+			$field_name = isset( $field['name'] ) ? $field['name'] : '';
+			$field_id   = isset( $field['id'] ) ? $field['id'] : '';
+
+			if ( empty( $field_name ) || empty( $field_id ) ) {
+				continue;
+			}
+
+			// Match by our naming convention
+			foreach ( $this->required_fields as $param_key => $required ) {
+				if ( $field_name === $required['name'] ) {
+					$mapping[ $param_key ] = $field_id;
+					break;
+				}
+			}
+		}
+
+		// Create missing fields
+		foreach ( $this->required_fields as $param_key => $required ) {
+			if ( ! isset( $mapping[ $param_key ] ) ) {
+				$field_id = $this->create_custom_field( $location_id, $token, $required );
+				if ( ! is_wp_error( $field_id ) && ! empty( $field_id ) ) {
+					$mapping[ $param_key ] = $field_id;
+				} else {
+					aqm_ghl_log(
+						'Custom field provisioner: Failed to create field.',
+						array(
+							'location_id' => $location_id,
+							'param_key'   => $param_key,
+							'error'       => is_wp_error( $field_id ) ? $field_id->get_error_message() : 'Unknown error',
+						)
+					);
+				}
+			}
+		}
+
+		// Cache the mapping
+		update_option( $cache_key, $mapping, false );
+		set_transient( $transient_key, true, $this->cache_expiration );
+
+		return $mapping;
+	}
+
+	/**
+	 * Fetch all custom fields for a location from GHL API.
+	 *
+	 * @param string $location_id GHL Location ID.
+	 * @param string $token       Private integration token.
+	 *
+	 * @return array|\WP_Error Array of field objects or WP_Error on failure.
+	 */
+	private function fetch_custom_fields( $location_id, $token ) {
+		$url = sprintf( 'https://services.leadconnectorhq.com/locations/%s/customFields/', $location_id );
+
+		$args = array(
+			'headers' => array(
+				'Authorization' => 'Bearer ' . $token,
+				'Content-Type'  => 'application/json',
+				'Version'       => '2021-07-28',
+			),
+			'timeout' => 15,
+		);
+
+		$response = wp_remote_get( $url, $args );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		if ( $code < 200 || $code >= 300 ) {
+			$body = wp_remote_retrieve_body( $response );
+			return new WP_Error(
+				'ghl_api_error',
+				sprintf( 'GHL API returned status %d: %s', $code, $body ),
+				array( 'status' => $code, 'body' => $body )
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( ! is_array( $data ) ) {
+			return new WP_Error( 'ghl_api_invalid_response', 'Invalid JSON response from GHL API.' );
+		}
+
+		// GHL API may return fields in a 'customFields' key or directly as array
+		if ( isset( $data['customFields'] ) && is_array( $data['customFields'] ) ) {
+			return $data['customFields'];
+		}
+
+		return is_array( $data ) ? $data : array();
+	}
+
+	/**
+	 * Create a custom field in GHL.
+	 *
+	 * @param string $location_id GHL Location ID.
+	 * @param string $token       Private integration token.
+	 * @param array  $field_data  Field data (name, label, type).
+	 *
+	 * @return string|\WP_Error Field ID on success, WP_Error on failure.
+	 */
+	private function create_custom_field( $location_id, $token, $field_data ) {
+		$url = sprintf( 'https://services.leadconnectorhq.com/locations/%s/customFields/', $location_id );
+
+		$payload = array(
+			'name'  => $field_data['name'],
+			'label' => $field_data['label'],
+			'type'  => $field_data['type'],
+		);
+
+		$args = array(
+			'headers' => array(
+				'Authorization' => 'Bearer ' . $token,
+				'Content-Type'  => 'application/json',
+				'Version'       => '2021-07-28',
+			),
+			'timeout' => 15,
+			'body'    => wp_json_encode( $payload ),
+		);
+
+		$response = wp_remote_post( $url, $args );
+
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		if ( $code < 200 || $code >= 300 ) {
+			$body = wp_remote_retrieve_body( $response );
+			return new WP_Error(
+				'ghl_api_error',
+				sprintf( 'GHL API returned status %d: %s', $code, $body ),
+				array( 'status' => $code, 'body' => $body )
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( ! is_array( $data ) || empty( $data['id'] ) ) {
+			return new WP_Error( 'ghl_api_invalid_response', 'Invalid response from GHL API when creating field.' );
+		}
+
+		return $data['id'];
+	}
+
+	/**
+	 * Get the cache key for a location's field mapping.
+	 *
+	 * @param string $location_id GHL Location ID.
+	 *
+	 * @return string
+	 */
+	private function get_cache_key( $location_id ) {
+		return 'aqm_ghl_field_mapping_' . md5( $location_id );
+	}
+
+	/**
+	 * Get the transient key for a location (throttling).
+	 *
+	 * @param string $location_id GHL Location ID.
+	 *
+	 * @return string
+	 */
+	private function get_transient_key( $location_id ) {
+		return 'aqm_ghl_field_mapping_transient_' . md5( $location_id );
+	}
+
+	/**
+	 * Clear cache for a specific location.
+	 *
+	 * @param string $location_id GHL Location ID.
+	 */
+	public function clear_cache( $location_id ) {
+		$cache_key = $this->get_cache_key( $location_id );
+		$transient_key = $this->get_transient_key( $location_id );
+
+		delete_option( $cache_key );
+		delete_transient( $transient_key );
+	}
+
+	/**
+	 * Clear cache for all locations.
+	 */
+	public function clear_all_caches() {
+		global $wpdb;
+
+		// Delete all field mapping options
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+				'aqm_ghl_field_mapping_%'
+			)
+		);
+
+		// Delete all transients
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+				'_transient_aqm_ghl_field_mapping_transient_%',
+				'_transient_timeout_aqm_ghl_field_mapping_transient_%'
+			)
+		);
+	}
+}

@@ -12,17 +12,23 @@ if ( ! function_exists( 'aqm_ghl_get_settings' ) ) {
 	 */
 	function aqm_ghl_get_settings() {
 		$defaults = array(
-			'location_id'    => '',
-			'private_token'  => '',
-			'github_token'   => '',
-			'form_ids'       => array(),
+			'locations'      => array(), // Multi-location support: array of location configs
+			'location_id'   => '',      // Legacy single location (deprecated, migrated to locations)
+			'private_token' => '',      // Legacy single token (deprecated, migrated to locations)
+			'github_token'  => '',
+			'form_ids'       => array(), // Legacy (deprecated, now per-location)
 			'mapping'        => array(), // per form: [form_id] => [email, phone, first_name, last_name]
 			'custom_fields'  => array(), // per form: [form_id] => [ [ghl_field_id, form_field_id], ... ]
-			'tags'           => '',
+			'tags'           => '',     // Legacy (deprecated, now per-location)
 			'enable_logging' => false,
 		);
 
 		$settings = get_option( AQM_GHL_OPTION_KEY, array() );
+		
+		// Migrate old single-location settings to new multi-location format
+		if ( ! empty( $settings['location_id'] ) && empty( $settings['locations'] ) ) {
+			$settings = aqm_ghl_migrate_to_multi_location( $settings );
+		}
 		
 		// Migrate old form_id (singular) to form_ids (plural array)
 		if ( ! empty( $settings['form_id'] ) && empty( $settings['form_ids'] ) ) {
@@ -32,6 +38,83 @@ if ( ! function_exists( 'aqm_ghl_get_settings' ) ) {
 		}
 
 		return wp_parse_args( is_array( $settings ) ? $settings : array(), $defaults );
+	}
+}
+
+if ( ! function_exists( 'aqm_ghl_migrate_to_multi_location' ) ) {
+	/**
+	 * Migrate old single-location settings to new multi-location format.
+	 *
+	 * @param array $settings Existing settings.
+	 * @return array Migrated settings.
+	 */
+	function aqm_ghl_migrate_to_multi_location( $settings ) {
+		if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) ) {
+			return $settings;
+		}
+
+		// Create default location from old settings
+		$default_location = array(
+			'name'         => __( 'Default Location', 'aqm-ghl' ),
+			'location_id'  => $settings['location_id'],
+			'private_token' => $settings['private_token'],
+			'form_ids'     => ! empty( $settings['form_ids'] ) && is_array( $settings['form_ids'] ) ? $settings['form_ids'] : array(),
+			'tags'         => ! empty( $settings['tags'] ) ? $settings['tags'] : '',
+		);
+
+		$settings['locations'] = array( $default_location );
+
+		// Keep legacy fields for backwards compatibility but mark as migrated
+		$settings['_migrated_to_multi_location'] = true;
+
+		// Save migrated settings
+		update_option( AQM_GHL_OPTION_KEY, $settings );
+
+		aqm_ghl_log( 'Migrated single-location settings to multi-location format.' );
+
+		return $settings;
+	}
+}
+
+if ( ! function_exists( 'aqm_ghl_get_location_for_form' ) ) {
+	/**
+	 * Get the location configuration for a specific form ID.
+	 *
+	 * @param int $form_id Form ID.
+	 * @return array|null Location config or null if not found.
+	 */
+	function aqm_ghl_get_location_for_form( $form_id ) {
+		$settings = aqm_ghl_get_settings();
+		$form_id  = absint( $form_id );
+
+		// Check multi-location format first
+		if ( ! empty( $settings['locations'] ) && is_array( $settings['locations'] ) ) {
+			foreach ( $settings['locations'] as $location ) {
+				if ( ! empty( $location['form_ids'] ) && is_array( $location['form_ids'] ) ) {
+					if ( in_array( $form_id, array_map( 'absint', $location['form_ids'] ), true ) ) {
+						return $location;
+					}
+				}
+			}
+
+			// No match found, return default (first) location if available
+			if ( ! empty( $settings['locations'][0] ) ) {
+				return $settings['locations'][0];
+			}
+		}
+
+		// Fallback to legacy single-location format
+		if ( ! empty( $settings['location_id'] ) && ! empty( $settings['private_token'] ) ) {
+			return array(
+				'name'         => __( 'Default Location', 'aqm-ghl' ),
+				'location_id'  => $settings['location_id'],
+				'private_token' => $settings['private_token'],
+				'form_ids'     => ! empty( $settings['form_ids'] ) && is_array( $settings['form_ids'] ) ? $settings['form_ids'] : array(),
+				'tags'         => ! empty( $settings['tags'] ) ? $settings['tags'] : '',
+			);
+		}
+
+		return null;
 	}
 }
 

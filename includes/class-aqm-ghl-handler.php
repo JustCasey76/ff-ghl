@@ -17,11 +17,19 @@ class AQM_GHL_Handler {
 	private $utm_tracker;
 
 	/**
+	 * Custom Field Provisioner instance.
+	 *
+	 * @var AQM_GHL_Custom_Field_Provisioner
+	 */
+	private $provisioner;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		add_action( 'frm_after_create_entry', array( $this, 'maybe_send_to_ghl' ), 20, 2 );
-		$this->utm_tracker = new AQM_GHL_UTM_Tracker();
+		$this->utm_tracker  = new AQM_GHL_UTM_Tracker();
+		$this->provisioner = new AQM_GHL_Custom_Field_Provisioner();
 	}
 
 	/**
@@ -31,16 +39,17 @@ class AQM_GHL_Handler {
 	 * @param int $form_id  Form ID.
 	 */
 	public function maybe_send_to_ghl( $entry_id, $form_id ) {
-		$settings = aqm_ghl_get_settings();
+		// Get location configuration for this form
+		$location = aqm_ghl_get_location_for_form( $form_id );
 
-		$form_ids = ! empty( $settings['form_ids'] ) && is_array( $settings['form_ids'] ) ? array_map( 'absint', $settings['form_ids'] ) : array();
-
-		if ( empty( $form_ids ) || ! in_array( (int) $form_id, $form_ids, true ) ) {
+		if ( ! $location || empty( $location['location_id'] ) || empty( $location['private_token'] ) ) {
+			aqm_ghl_log( 'Missing location configuration for form.', array( 'form_id' => $form_id ) );
 			return;
 		}
 
-		if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) ) {
-			aqm_ghl_log( 'Missing configuration. Aborting send.' );
+		// Check if this form is mapped to this location
+		$form_ids = ! empty( $location['form_ids'] ) && is_array( $location['form_ids'] ) ? array_map( 'absint', $location['form_ids'] ) : array();
+		if ( ! empty( $form_ids ) && ! in_array( (int) $form_id, $form_ids, true ) ) {
 			return;
 		}
 
@@ -72,19 +81,23 @@ class AQM_GHL_Handler {
 			return;
 		}
 
+		$settings = aqm_ghl_get_settings(); // Get full settings for mapping/custom fields
+
 		$payload = array(
-			'locationId' => $settings['location_id'],
+			'locationId' => $location['location_id'],
 			'email'      => is_array( $email ) ? reset( $email ) : $email,
 			'phone'      => $phone,
 			'firstName'  => is_array( $first_name ) ? reset( $first_name ) : $first_name,
 			'lastName'   => is_array( $last_name ) ? reset( $last_name ) : $last_name,
 		);
 
-		if ( ! empty( $settings['tags'] ) ) {
+		// Use location-specific tags if available
+		$tags_string = ! empty( $location['tags'] ) ? $location['tags'] : ( ! empty( $settings['tags'] ) ? $settings['tags'] : '' );
+		if ( ! empty( $tags_string ) ) {
 			$tags = array_filter(
 				array_map(
 					'trim',
-					explode( ',', $settings['tags'] )
+					explode( ',', $tags_string )
 				)
 			);
 			if ( ! empty( $tags ) ) {
@@ -97,12 +110,12 @@ class AQM_GHL_Handler {
 			$payload['customFields'] = $custom_fields;
 		}
 
-		// Inject UTM parameters and GCLID
-		$payload = $this->inject_utm_data( $payload );
+		// Inject UTM parameters and GCLID using provisioned field IDs
+		$payload = $this->inject_utm_data( $payload, $location['location_id'], $location['private_token'] );
 
 		$payload = aqm_ghl_clean_payload( $payload );
 
-		$response = aqm_ghl_send_contact_payload( $payload, $settings['private_token'] );
+		$response = aqm_ghl_send_contact_payload( $payload, $location['private_token'] );
 
 		if ( is_wp_error( $response ) ) {
 			aqm_ghl_log(
@@ -196,137 +209,80 @@ class AQM_GHL_Handler {
 	}
 
 	/**
-	 * Inject UTM parameters and GCLID into the payload.
+	 * Inject UTM parameters and GCLID into the payload using provisioned field IDs.
 	 *
-	 * Maps:
-	 * - gclid → customFields array (custom_gclid)
-	 * - utm_* → system fields if GHL supports them (source, medium, campaign)
-	 *
-	 * @param array $payload Existing payload array.
+	 * @param array  $payload     Existing payload array.
+	 * @param string $location_id GHL Location ID.
+	 * @param string $token       Private integration token.
 	 * @return array Modified payload with UTM/GCLID data.
 	 */
-	private function inject_utm_data( $payload ) {
+	private function inject_utm_data( $payload, $location_id, $token ) {
 		$params = $this->utm_tracker->get_tracked_parameters();
 
 		if ( empty( $params ) ) {
 			return $payload;
 		}
 
-		// Extract GCLID (goes to custom field)
-		$gclid = isset( $params['gclid'] ) ? $params['gclid'] : '';
+		// Get field mapping for this location (provisions if needed)
+		$field_mapping = $this->provisioner->get_field_mapping( $location_id, $token );
+
+		if ( empty( $field_mapping ) ) {
+			aqm_ghl_log(
+				'No field mapping available for UTM injection. Fields may not be provisioned.',
+				array( 'location_id' => $location_id )
+			);
+			// Continue without UTM data rather than failing the entire submission
+			return $payload;
+		}
 
 		// Extract UTM parameters
-		$utm_source   = isset( $params['utm_source'] ) ? $params['utm_source'] : '';
-		$utm_medium   = isset( $params['utm_medium'] ) ? $params['utm_medium'] : '';
-		$utm_campaign = isset( $params['utm_campaign'] ) ? $params['utm_campaign'] : '';
-		$utm_term     = isset( $params['utm_term'] ) ? $params['utm_term'] : '';
-		$utm_content  = isset( $params['utm_content'] ) ? $params['utm_content'] : '';
-
-		// Add GCLID to customFields array
-		if ( ! empty( $gclid ) ) {
-			if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
-				$payload['customFields'] = array();
-			}
-
-			// Check if gclid custom field already exists (don't overwrite form field data)
-			$gclid_exists = false;
-			foreach ( $payload['customFields'] as $key => $field ) {
-				if ( isset( $field['id'] ) && $field['id'] === 'custom_gclid' ) {
-					$gclid_exists = true;
-					break;
-				}
-			}
-
-			// Only add if it doesn't already exist
-			if ( ! $gclid_exists ) {
-				$payload['customFields'][] = array(
-					'id'    => 'custom_gclid',
-					'value' => $gclid,
-				);
-			}
-		}
-
-		// Add UTM parameters to customFields array
-		// Note: GHL API accepts custom fields with IDs like 'custom_utm_source', etc.
-		// If your GHL instance uses different field IDs, update them accordingly
-		$utm_custom_fields = array(
-			'utm_source'   => 'custom_utm_source',
-			'utm_medium'   => 'custom_utm_medium',
-			'utm_campaign' => 'custom_utm_campaign',
+		$utm_params = array(
+			'gclid'        => isset( $params['gclid'] ) ? $params['gclid'] : '',
+			'utm_source'   => isset( $params['utm_source'] ) ? $params['utm_source'] : '',
+			'utm_medium'   => isset( $params['utm_medium'] ) ? $params['utm_medium'] : '',
+			'utm_campaign' => isset( $params['utm_campaign'] ) ? $params['utm_campaign'] : '',
+			'utm_term'     => isset( $params['utm_term'] ) ? $params['utm_term'] : '',
+			'utm_content'  => isset( $params['utm_content'] ) ? $params['utm_content'] : '',
 		);
 
-		foreach ( $utm_custom_fields as $utm_param => $ghl_field_id ) {
-			$value = '';
-			if ( 'utm_source' === $utm_param && ! empty( $utm_source ) ) {
-				$value = $utm_source;
-			} elseif ( 'utm_medium' === $utm_param && ! empty( $utm_medium ) ) {
-				$value = $utm_medium;
-			} elseif ( 'utm_campaign' === $utm_param && ! empty( $utm_campaign ) ) {
-				$value = $utm_campaign;
-			}
-
-			if ( ! empty( $value ) ) {
-				if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
-					$payload['customFields'] = array();
-				}
-
-				// Check if field already exists (don't overwrite)
-				$field_exists = false;
-				foreach ( $payload['customFields'] as $field ) {
-					if ( isset( $field['id'] ) && $field['id'] === $ghl_field_id ) {
-						$field_exists = true;
-						break;
-					}
-				}
-
-				if ( ! $field_exists ) {
-					$payload['customFields'][] = array(
-						'id'    => $ghl_field_id,
-						'value' => $value,
-					);
-				}
-			}
+		// Initialize customFields array if needed
+		if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
+			$payload['customFields'] = array();
 		}
 
-		// utm_term and utm_content typically go to custom fields
-		if ( ! empty( $utm_term ) ) {
-			if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
-				$payload['customFields'] = array();
+		// Add each UTM parameter if we have a field ID and value
+		foreach ( $utm_params as $param_key => $value ) {
+			if ( empty( $value ) ) {
+				continue;
 			}
 
-			$utm_term_exists = false;
-			foreach ( $payload['customFields'] as $field ) {
-				if ( isset( $field['id'] ) && $field['id'] === 'custom_utm_term' ) {
-					$utm_term_exists = true;
-					break;
-				}
-			}
-
-			if ( ! $utm_term_exists ) {
-				$payload['customFields'][] = array(
-					'id'    => 'custom_utm_term',
-					'value' => $utm_term,
+			// Get the provisioned field ID for this parameter
+			if ( ! isset( $field_mapping[ $param_key ] ) || empty( $field_mapping[ $param_key ] ) ) {
+				aqm_ghl_log(
+					'Field mapping missing for UTM parameter.',
+					array(
+						'location_id' => $location_id,
+						'param_key'   => $param_key,
+					)
 				);
-			}
-		}
-
-		if ( ! empty( $utm_content ) ) {
-			if ( ! isset( $payload['customFields'] ) || ! is_array( $payload['customFields'] ) ) {
-				$payload['customFields'] = array();
+				continue;
 			}
 
-			$utm_content_exists = false;
+			$field_id = $field_mapping[ $param_key ];
+
+			// Check if field already exists (don't overwrite)
+			$field_exists = false;
 			foreach ( $payload['customFields'] as $field ) {
-				if ( isset( $field['id'] ) && $field['id'] === 'custom_utm_content' ) {
-					$utm_content_exists = true;
+				if ( isset( $field['id'] ) && $field['id'] === $field_id ) {
+					$field_exists = true;
 					break;
 				}
 			}
 
-			if ( ! $utm_content_exists ) {
+			if ( ! $field_exists ) {
 				$payload['customFields'][] = array(
-					'id'    => 'custom_utm_content',
-					'value' => $utm_content,
+					'id'    => $field_id,
+					'value' => $value,
 				);
 			}
 		}
