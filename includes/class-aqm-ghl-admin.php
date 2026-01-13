@@ -493,8 +493,9 @@ class AQM_GHL_Admin {
 		$provisioner->clear_cache( $settings['location_id'] );
 		$field_mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
 		
-		// Enhanced error detection - try to fetch fields directly to see what's happening
+		// Enhanced error detection - try to fetch fields directly and attempt creation
 		$provisioning_errors = array();
+		$provisioning_details = array();
 		
 		if ( empty( $field_mapping ) ) {
 			// Try to fetch fields directly to diagnose the issue
@@ -521,7 +522,50 @@ class AQM_GHL_Admin {
 				} else {
 					$test_data = json_decode( $test_body, true );
 					if ( is_array( $test_data ) ) {
-						$provisioning_errors[] = sprintf( 'API call succeeded but no fields found. Response structure: %s', wp_json_encode( array_keys( $test_data ) ) );
+						$field_count = isset( $test_data['customFields'] ) && is_array( $test_data['customFields'] ) ? count( $test_data['customFields'] ) : 0;
+						$provisioning_errors[] = sprintf( 'API call succeeded but found %d fields. Response structure: %s', $field_count, wp_json_encode( array_keys( $test_data ) ) );
+						
+						// Try to create a test field to see if creation works
+						$create_test = wp_remote_post(
+							sprintf( 'https://services.leadconnectorhq.com/locations/%s/customFields/', $settings['location_id'] ),
+							array(
+								'headers' => array(
+									'Authorization' => 'Bearer ' . $settings['private_token'],
+									'Content-Type'  => 'application/json',
+									'Version'       => '2021-07-28',
+								),
+								'timeout' => 15,
+								'body'    => wp_json_encode( array(
+									'name'  => 'AQM - Test Field',
+									'label' => 'Test Field',
+									'type'  => 'TEXT',
+								) ),
+							)
+						);
+						
+						if ( ! is_wp_error( $create_test ) ) {
+							$create_code = wp_remote_retrieve_response_code( $create_test );
+							$create_body = wp_remote_retrieve_body( $create_test );
+							$create_data = json_decode( $create_body, true );
+							
+							$provisioning_details['create_test'] = array(
+								'status_code' => $create_code,
+								'response_keys' => is_array( $create_data ) ? array_keys( $create_data ) : 'not_array',
+								'response_sample' => substr( $create_body, 0, 300 ),
+							);
+							
+							if ( $create_code >= 200 && $create_code < 300 ) {
+								if ( is_array( $create_data ) && ! empty( $create_data['id'] ) ) {
+									$provisioning_errors[] = sprintf( 'Field creation test succeeded! Field ID: %s. Response structure: %s', $create_data['id'], wp_json_encode( array_keys( $create_data ) ) );
+								} else {
+									$provisioning_errors[] = sprintf( 'Field creation test returned success but no field ID found. Response: %s', substr( $create_body, 0, 300 ) );
+								}
+							} else {
+								$provisioning_errors[] = sprintf( 'Field creation test failed with status %d: %s', $create_code, substr( $create_body, 0, 200 ) );
+							}
+						} else {
+							$provisioning_errors[] = 'Field creation test network error: ' . $create_test->get_error_message();
+						}
 					} else {
 						$provisioning_errors[] = sprintf( 'API call succeeded but invalid JSON response: %s', substr( $test_body, 0, 200 ) );
 					}
@@ -666,9 +710,12 @@ class AQM_GHL_Admin {
 			$response_data['field_mapping_count'] = count( $field_mapping );
 		}
 		
-		// Add provisioning errors for debugging
+		// Add provisioning errors and details for debugging
 		if ( ! empty( $provisioning_errors ) ) {
 			$response_data['provisioning_errors'] = $provisioning_errors;
+		}
+		if ( ! empty( $provisioning_details ) ) {
+			$response_data['provisioning_details'] = $provisioning_details;
 		}
 		
 		wp_send_json_success( $response_data );
