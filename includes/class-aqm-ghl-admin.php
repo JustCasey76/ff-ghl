@@ -493,6 +493,42 @@ class AQM_GHL_Admin {
 		$provisioner->clear_cache( $settings['location_id'] );
 		$field_mapping = $provisioner->get_field_mapping( $settings['location_id'], $settings['private_token'], true );
 		
+		// Enhanced error detection - try to fetch fields directly to see what's happening
+		$provisioning_errors = array();
+		
+		if ( empty( $field_mapping ) ) {
+			// Try to fetch fields directly to diagnose the issue
+			$test_response = wp_remote_get(
+				sprintf( 'https://services.leadconnectorhq.com/locations/%s/customFields/', $settings['location_id'] ),
+				array(
+					'headers' => array(
+						'Authorization' => 'Bearer ' . $settings['private_token'],
+						'Content-Type'  => 'application/json',
+						'Version'       => '2021-07-28',
+					),
+					'timeout' => 15,
+				)
+			);
+			
+			if ( is_wp_error( $test_response ) ) {
+				$provisioning_errors[] = 'Network error: ' . $test_response->get_error_message();
+			} else {
+				$test_code = wp_remote_retrieve_response_code( $test_response );
+				$test_body = wp_remote_retrieve_body( $test_response );
+				
+				if ( $test_code < 200 || $test_code >= 300 ) {
+					$provisioning_errors[] = sprintf( 'API returned status %d: %s', $test_code, $test_body );
+				} else {
+					$test_data = json_decode( $test_body, true );
+					if ( is_array( $test_data ) ) {
+						$provisioning_errors[] = sprintf( 'API call succeeded but no fields found. Response structure: %s', wp_json_encode( array_keys( $test_data ) ) );
+					} else {
+						$provisioning_errors[] = sprintf( 'API call succeeded but invalid JSON response: %s', substr( $test_body, 0, 200 ) );
+					}
+				}
+			}
+		}
+		
 		// Log field mapping for debugging
 		aqm_ghl_log(
 			'Test contact: Field mapping retrieved after provisioning.',
@@ -500,6 +536,7 @@ class AQM_GHL_Admin {
 				'location_id' => $settings['location_id'],
 				'field_mapping' => $field_mapping,
 				'mapping_count' => count( $field_mapping ),
+				'provisioning_errors' => $provisioning_errors,
 			)
 		);
 		
@@ -602,7 +639,12 @@ class AQM_GHL_Admin {
 				count( $field_mapping )
 			);
 		} else {
-			$message .= ' ' . __( 'Warning: Custom fields were not provisioned. UTM parameters were not included in the test contact. Please use the "Refresh/Provision Custom Fields" button first.', 'aqm-ghl' );
+			$message .= ' ' . __( 'Warning: Custom fields were not provisioned. UTM parameters were not included in the test contact.', 'aqm-ghl' );
+			if ( ! empty( $provisioning_errors ) ) {
+				$message .= ' ' . __( 'Errors:', 'aqm-ghl' ) . ' ' . implode( '; ', $provisioning_errors );
+			} else {
+				$message .= ' ' . __( 'Please use the "Refresh/Provision Custom Fields" button first, or check debug logs for details.', 'aqm-ghl' );
+			}
 		}
 		
 		$response_data = array(
@@ -616,6 +658,11 @@ class AQM_GHL_Admin {
 		if ( isset( $field_mapping ) ) {
 			$response_data['field_mapping'] = $field_mapping;
 			$response_data['field_mapping_count'] = count( $field_mapping );
+		}
+		
+		// Add provisioning errors for debugging
+		if ( ! empty( $provisioning_errors ) ) {
+			$response_data['provisioning_errors'] = $provisioning_errors;
 		}
 		
 		wp_send_json_success( $response_data );
