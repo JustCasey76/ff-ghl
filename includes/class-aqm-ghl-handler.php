@@ -135,6 +135,17 @@ class AQM_GHL_Handler {
 			return;
 		}
 
+		$utm_params = $this->utm_tracker->get_tracked_parameters();
+		if ( empty( $utm_params ) ) {
+			aqm_ghl_log(
+				'No UTM parameters found for this submission.',
+				array(
+					'entry_id' => (int) $entry_id,
+					'form_id'  => (int) $form_id,
+				)
+			);
+		}
+
 		$payload = array(
 			'locationId' => $settings['location_id'],
 			'email'      => is_array( $email ) ? reset( $email ) : $email,
@@ -186,6 +197,7 @@ class AQM_GHL_Handler {
 					'context' => array(
 						'entry_id' => (int) $entry_id,
 						'form_id'  => (int) $form_id,
+						'utm_params' => $utm_params,
 					),
 				)
 			);
@@ -213,6 +225,7 @@ class AQM_GHL_Handler {
 					'context'  => array(
 						'entry_id' => (int) $entry_id,
 						'form_id'  => (int) $form_id,
+						'utm_params' => $utm_params,
 					),
 				)
 			);
@@ -236,6 +249,7 @@ class AQM_GHL_Handler {
 				'context'  => array(
 					'entry_id' => (int) $entry_id,
 					'form_id'  => (int) $form_id,
+					'utm_params' => $utm_params,
 				),
 			)
 		);
