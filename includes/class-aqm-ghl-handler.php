@@ -44,16 +44,49 @@ class AQM_GHL_Handler {
 		$form_ids = ! empty( $settings['form_ids'] ) && is_array( $settings['form_ids'] ) ? array_map( 'absint', $settings['form_ids'] ) : array();
 
 		if ( empty( $form_ids ) || ! in_array( (int) $form_id, $form_ids, true ) ) {
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success' => false,
+					'status'  => 0,
+					'message' => __( 'Form submission skipped: form is not enabled for GHL.', 'aqm-ghl' ),
+					'context' => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
+				)
+			);
 			return;
 		}
 
 		if ( empty( $settings['location_id'] ) || empty( $settings['private_token'] ) ) {
 			aqm_ghl_log( 'Missing configuration. Aborting send.' );
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success' => false,
+					'status'  => 0,
+					'message' => __( 'Submission aborted: missing Location ID or Private Integration Token.', 'aqm-ghl' ),
+					'context' => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
+				)
+			);
 			return;
 		}
 
 		if ( ! class_exists( 'FrmEntry' ) ) {
 			aqm_ghl_log( 'Formidable Forms not available when processing entry.' );
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success' => false,
+					'status'  => 0,
+					'message' => __( 'Submission aborted: Formidable Forms is not available.', 'aqm-ghl' ),
+					'context' => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
+				)
+			);
 			return;
 		}
 
@@ -61,6 +94,17 @@ class AQM_GHL_Handler {
 
 		if ( ! $entry || empty( $entry->metas ) || ! is_array( $entry->metas ) ) {
 			aqm_ghl_log( 'Unable to load entry metas.', array( 'entry_id' => $entry_id ) );
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success' => false,
+					'status'  => 0,
+					'message' => __( 'Submission aborted: entry data could not be loaded.', 'aqm-ghl' ),
+					'context' => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
+				)
+			);
 			return;
 		}
 
@@ -77,6 +121,17 @@ class AQM_GHL_Handler {
 
 		if ( empty( $email ) && empty( $phone ) ) {
 			aqm_ghl_log( 'Email or phone required; both missing.', array( 'entry_id' => $entry_id ) );
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success' => false,
+					'status'  => 0,
+					'message' => __( 'Submission aborted: email and phone were both empty.', 'aqm-ghl' ),
+					'context' => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
+				)
+			);
 			return;
 		}
 
@@ -121,17 +176,44 @@ class AQM_GHL_Handler {
 					'form_id'   => $form_id,
 				)
 			);
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success' => false,
+					'status'  => 0,
+					'payload' => $payload,
+					'response' => $response->get_error_message(),
+					'message' => __( 'Submission failed: request error when calling GoHighLevel.', 'aqm-ghl' ),
+					'context' => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
+				)
+			);
 			return;
 		}
 
 		$code = wp_remote_retrieve_response_code( $response );
 		if ( $code < 200 || $code >= 300 ) {
+			$body = wp_remote_retrieve_body( $response );
 			aqm_ghl_log(
 				'Non-2xx response from GoHighLevel.',
 				array(
 					'status'   => $code,
-					'body'     => wp_remote_retrieve_body( $response ),
+					'body'     => $body,
 					'entry_id' => $entry_id,
+				)
+			);
+			aqm_ghl_store_last_submission_result(
+				array(
+					'success'  => false,
+					'status'   => $code,
+					'payload'  => $payload,
+					'response' => $body,
+					'message'  => __( 'Submission failed: non-2xx response from GoHighLevel.', 'aqm-ghl' ),
+					'context'  => array(
+						'entry_id' => (int) $entry_id,
+						'form_id'  => (int) $form_id,
+					),
 				)
 			);
 			return;
@@ -142,6 +224,19 @@ class AQM_GHL_Handler {
 			array(
 				'entry_id' => $entry_id,
 				'status'   => $code,
+			)
+		);
+		aqm_ghl_store_last_submission_result(
+			array(
+				'success'  => true,
+				'status'   => $code,
+				'payload'  => $payload,
+				'response' => wp_remote_retrieve_body( $response ),
+				'message'  => __( 'Submission sent successfully to GoHighLevel.', 'aqm-ghl' ),
+				'context'  => array(
+					'entry_id' => (int) $entry_id,
+					'form_id'  => (int) $form_id,
+				),
 			)
 		);
 	}

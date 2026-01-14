@@ -360,6 +360,50 @@ if ( ! function_exists( 'aqm_ghl_get_last_test_result' ) ) {
 		return wp_parse_args( is_array( $saved ) ? $saved : array(), $defaults );
 	}
 }
+
+if ( ! function_exists( 'aqm_ghl_store_last_submission_result' ) ) {
+	/**
+	 * Store the last live submission result for display in admin.
+	 *
+	 * @param array $data Result data.
+	 */
+	function aqm_ghl_store_last_submission_result( $data ) {
+		$payload = array(
+			'timestamp' => current_time( 'mysql' ),
+			'success'   => isset( $data['success'] ) ? (bool) $data['success'] : false,
+			'status'    => isset( $data['status'] ) ? (int) $data['status'] : 0,
+			'payload'   => isset( $data['payload'] ) ? $data['payload'] : array(),
+			'response'  => isset( $data['response'] ) ? $data['response'] : '',
+			'message'   => isset( $data['message'] ) ? sanitize_text_field( $data['message'] ) : '',
+			'context'   => isset( $data['context'] ) && is_array( $data['context'] ) ? $data['context'] : array(),
+		);
+
+		update_option( AQM_GHL_LAST_SUBMISSION_RESULT_KEY, $payload, false );
+	}
+}
+
+if ( ! function_exists( 'aqm_ghl_get_last_submission_result' ) ) {
+	/**
+	 * Retrieve the last stored live submission result.
+	 *
+	 * @return array
+	 */
+	function aqm_ghl_get_last_submission_result() {
+		$defaults = array(
+			'timestamp' => '',
+			'success'   => false,
+			'status'    => 0,
+			'payload'   => array(),
+			'response'  => '',
+			'message'   => '',
+			'context'   => array(),
+		);
+
+		$saved = get_option( AQM_GHL_LAST_SUBMISSION_RESULT_KEY, array() );
+
+		return wp_parse_args( is_array( $saved ) ? $saved : array(), $defaults );
+	}
+}
 }
 
 if ( ! function_exists( 'aqm_ghl_sanitize_custom_fields' ) ) {

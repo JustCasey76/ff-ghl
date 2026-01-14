@@ -124,10 +124,13 @@ class AQM_GHL_Admin {
 			return;
 		}
 
-		$settings     = aqm_ghl_get_settings();
-		$forms        = aqm_ghl_get_formidable_forms();
-		$last_test    = aqm_ghl_get_last_test_result();
-		$last_payload = ! empty( $last_test['payload'] ) ? wp_json_encode( $last_test['payload'], JSON_PRETTY_PRINT ) : '';
+		$settings          = aqm_ghl_get_settings();
+		$forms             = aqm_ghl_get_formidable_forms();
+		$last_test         = aqm_ghl_get_last_test_result();
+		$last_payload      = ! empty( $last_test['payload'] ) ? wp_json_encode( $last_test['payload'], JSON_PRETTY_PRINT ) : '';
+		$last_submission   = aqm_ghl_get_last_submission_result();
+		$last_submission_payload = ! empty( $last_submission['payload'] ) ? wp_json_encode( $last_submission['payload'], JSON_PRETTY_PRINT ) : '';
+		$last_submission_context = ! empty( $last_submission['context'] ) ? wp_json_encode( $last_submission['context'], JSON_PRETTY_PRINT ) : '';
 		?>
 		<div class="wrap aqm-ghl-wrap">
 			<h1><?php esc_html_e( 'GHL + Formidable', 'aqm-ghl' ); ?></h1>
@@ -290,6 +293,36 @@ class AQM_GHL_Admin {
 					<?php endif; ?>
 				<?php else : ?>
 					<p><?php esc_html_e( 'No test run yet.', 'aqm-ghl' ); ?></p>
+				<?php endif; ?>
+
+				<h2><?php esc_html_e( 'Last Live Submission', 'aqm-ghl' ); ?></h2>
+				<?php if ( ! empty( $last_submission['timestamp'] ) ) : ?>
+					<p>
+						<strong><?php esc_html_e( 'Timestamp:', 'aqm-ghl' ); ?></strong>
+						<?php echo esc_html( $last_submission['timestamp'] ); ?>
+					</p>
+					<p>
+						<strong><?php esc_html_e( 'Status:', 'aqm-ghl' ); ?></strong>
+						<?php echo esc_html( $last_submission['status'] ); ?>
+					</p>
+					<p>
+						<strong><?php esc_html_e( 'Message:', 'aqm-ghl' ); ?></strong>
+						<?php echo esc_html( $last_submission['message'] ); ?>
+					</p>
+					<?php if ( $last_submission_context ) : ?>
+						<p><strong><?php esc_html_e( 'Context:', 'aqm-ghl' ); ?></strong></p>
+						<pre><?php echo esc_html( $last_submission_context ); ?></pre>
+					<?php endif; ?>
+					<?php if ( $last_submission_payload ) : ?>
+						<p><strong><?php esc_html_e( 'Request Payload:', 'aqm-ghl' ); ?></strong></p>
+						<pre><?php echo esc_html( $last_submission_payload ); ?></pre>
+					<?php endif; ?>
+					<?php if ( ! empty( $last_submission['response'] ) ) : ?>
+						<p><strong><?php esc_html_e( 'Response Body:', 'aqm-ghl' ); ?></strong></p>
+						<pre><?php echo esc_html( $last_submission['response'] ); ?></pre>
+					<?php endif; ?>
+				<?php else : ?>
+					<p><?php esc_html_e( 'No live submissions recorded yet.', 'aqm-ghl' ); ?></p>
 				<?php endif; ?>
 
 				<?php submit_button(); ?>
