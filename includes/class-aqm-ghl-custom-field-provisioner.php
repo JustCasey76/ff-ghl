@@ -20,26 +20,32 @@ class AQM_GHL_Custom_Field_Provisioner {
 	private $required_fields = array(
 		'gclid'        => array(
 			'name'     => 'AQM - gclid',
+			'alt_name' => 'gclid',
 			'dataType' => 'TEXT',
 		),
 		'utm_source'   => array(
 			'name'     => 'AQM - utm_source',
+			'alt_name' => 'utm_source',
 			'dataType' => 'TEXT',
 		),
 		'utm_medium'   => array(
 			'name'     => 'AQM - utm_medium',
+			'alt_name' => 'utm_medium',
 			'dataType' => 'TEXT',
 		),
 		'utm_campaign' => array(
 			'name'     => 'AQM - utm_campaign',
+			'alt_name' => 'utm_campaign',
 			'dataType' => 'TEXT',
 		),
 		'utm_term'     => array(
 			'name'     => 'AQM - utm_term',
+			'alt_name' => 'utm_term',
 			'dataType' => 'TEXT',
 		),
 		'utm_content'  => array(
 			'name'     => 'AQM - utm_content',
+			'alt_name' => 'utm_content',
 			'dataType' => 'TEXT',
 		),
 	);
@@ -110,7 +116,9 @@ class AQM_GHL_Custom_Field_Provisioner {
 
 			// Match by our naming convention
 			foreach ( $this->required_fields as $param_key => $required ) {
-				if ( $field_name === $required['name'] ) {
+				$match_primary = isset( $required['name'] ) && $field_name === $required['name'];
+				$match_alt     = isset( $required['alt_name'] ) && $field_name === $required['alt_name'];
+				if ( $match_primary || $match_alt ) {
 					$mapping[ $param_key ] = $field_id;
 					break;
 				}
