@@ -19,34 +19,28 @@ class AQM_GHL_Custom_Field_Provisioner {
 	 */
 	private $required_fields = array(
 		'gclid'        => array(
-			'name'  => 'AQM - gclid',
-			'label' => 'GCLID',
-			'type'  => 'TEXT',
+			'name'     => 'AQM - gclid',
+			'dataType' => 'TEXT',
 		),
 		'utm_source'   => array(
-			'name'  => 'AQM - utm_source',
-			'label' => 'UTM Source',
-			'type'  => 'TEXT',
+			'name'     => 'AQM - utm_source',
+			'dataType' => 'TEXT',
 		),
 		'utm_medium'   => array(
-			'name'  => 'AQM - utm_medium',
-			'label' => 'UTM Medium',
-			'type'  => 'TEXT',
+			'name'     => 'AQM - utm_medium',
+			'dataType' => 'TEXT',
 		),
 		'utm_campaign' => array(
-			'name'  => 'AQM - utm_campaign',
-			'label' => 'UTM Campaign',
-			'type'  => 'TEXT',
+			'name'     => 'AQM - utm_campaign',
+			'dataType' => 'TEXT',
 		),
 		'utm_term'     => array(
-			'name'  => 'AQM - utm_term',
-			'label' => 'UTM Term',
-			'type'  => 'TEXT',
+			'name'     => 'AQM - utm_term',
+			'dataType' => 'TEXT',
 		),
 		'utm_content'  => array(
-			'name'  => 'AQM - utm_content',
-			'label' => 'UTM Content',
-			'type'  => 'TEXT',
+			'name'     => 'AQM - utm_content',
+			'dataType' => 'TEXT',
 		),
 	);
 
@@ -273,7 +267,7 @@ class AQM_GHL_Custom_Field_Provisioner {
 	 *
 	 * @param string $location_id GHL Location ID.
 	 * @param string $token       Private integration token.
-	 * @param array  $field_data  Field data (name, label, type).
+	 * @param array  $field_data  Field data (name, dataType).
 	 *
 	 * @return string|\WP_Error Field ID on success, WP_Error on failure.
 	 */
@@ -281,9 +275,8 @@ class AQM_GHL_Custom_Field_Provisioner {
 		$url = sprintf( 'https://services.leadconnectorhq.com/locations/%s/customFields/', $location_id );
 
 		$payload = array(
-			'name'  => $field_data['name'],
-			'label' => $field_data['label'],
-			'type'  => $field_data['type'],
+			'name'     => $field_data['name'],
+			'dataType' => $field_data['dataType'],
 		);
 
 		$args = array(

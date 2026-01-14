@@ -536,9 +536,8 @@ class AQM_GHL_Admin {
 								),
 								'timeout' => 15,
 								'body'    => wp_json_encode( array(
-									'name'  => 'AQM - Test Field',
-									'label' => 'Test Field',
-									'type'  => 'TEXT',
+									'name'     => 'AQM - Test Field',
+									'dataType' => 'TEXT',
 								) ),
 							)
 						);
