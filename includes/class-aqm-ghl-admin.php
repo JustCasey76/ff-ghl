@@ -181,7 +181,16 @@ class AQM_GHL_Admin {
 												data-form-id="<?php echo esc_attr( $form->id ); ?>"
 												<?php checked( $is_checked ); ?>
 											/>
-											<span class="aqm-ghl-form-checkbox-label"><?php echo esc_html( $form->name ); ?></span>
+											<span class="aqm-ghl-form-checkbox-label">
+												<?php
+												printf(
+													/* translators: 1: form name, 2: form ID */
+													esc_html__( '%1$s (ID: %2$d)', 'aqm-ghl' ),
+													$form->name,
+													(int) $form->id
+												);
+												?>
+											</span>
 										</label>
 									<?php endforeach; ?>
 								<?php else : ?>
