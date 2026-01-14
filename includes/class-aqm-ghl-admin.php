@@ -584,9 +584,10 @@ class AQM_GHL_Admin {
 		);
 		
 		// Build initial payload
+		$unique_email = sprintf( 'john.doe+ghl-test-%s@example.com', substr( wp_generate_uuid4(), 0, 8 ) );
 		$payload = array(
 			'locationId' => $settings['location_id'],
-			'email'      => 'john.doe+ghl-test@example.com',
+			'email'      => $unique_email,
 			'phone'      => '+15555550123',
 			'firstName'  => 'John',
 			'lastName'   => 'Doe',
